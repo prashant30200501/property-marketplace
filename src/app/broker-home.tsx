@@ -69,22 +69,22 @@ export default function BrokerHomeScreen() {
 
       <View style={styles.actionsContainer}>
         <Pressable
-          style={styles.actionCard}
-          onPress={() => {}}
-        >
-          <View style={styles.actionIconContainer}>
-            <Text style={styles.actionIcon}>＋</Text>
-          </View>
+  style={styles.actionCard}
+  onPress={() => router.push("/broker-enquiries")}
+>
+  <View style={styles.actionIconContainer}>
+    <Text style={styles.actionIcon}>💬</Text>
+  </View>
 
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionTitle}>Add a property</Text>
-            <Text style={styles.actionSubtitle}>
-              Create a new property listing
-            </Text>
-          </View>
+  <View style={styles.actionTextContainer}>
+    <Text style={styles.actionTitle}>Customer enquiries</Text>
+    <Text style={styles.actionSubtitle}>
+      Keep track of interested customers
+    </Text>
+  </View>
 
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
+  <Text style={styles.arrow}>›</Text>
+</Pressable>
 
         <Pressable
           style={styles.actionCard}
