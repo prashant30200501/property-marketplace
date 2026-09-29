@@ -53,7 +53,28 @@ export default function CustomerHomeScreen() {
     Explore properties →
   </Text>
 </Pressable>
-      </View>
+            </View>
+
+      {/* My Enquiries */}
+      <Pressable
+        style={styles.myEnquiriesButton}
+        onPress={() => router.push("/my-enquiries")}
+      >
+        <Text style={styles.myEnquiriesIcon}>📋</Text>
+
+        <View style={styles.myEnquiriesContent}>
+          <Text style={styles.myEnquiriesTitle}>
+            My Enquiries
+          </Text>
+          <Text style={styles.myEnquiriesSubtitle}>
+            Track your property enquiries
+          </Text>
+        </View>
+
+        <Text style={styles.myEnquiriesArrow}>→</Text>
+      </Pressable>
+
+      {/* Property categories */}
 
       {/* Property categories */}
       <View style={styles.sectionHeader}>
@@ -281,4 +302,35 @@ logoutText: {
   fontSize: 13,
   fontWeight: "700",
 },
+  myEnquiriesButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#FFFFFF",
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#EAECE8",
+    marginBottom: 30,
+  },
+  myEnquiriesIcon: {
+    fontSize: 26,
+    marginRight: 14,
+  },
+  myEnquiriesContent: {
+    flex: 1,
+  },
+  myEnquiriesTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#173F35",
+  },
+  myEnquiriesSubtitle: {
+    fontSize: 12,
+    color: "#777",
+    marginTop: 5,
+  },
+  myEnquiriesArrow: {
+    fontSize: 22,
+    color: "#47765E",
+  },
 });

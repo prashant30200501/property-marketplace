@@ -150,14 +150,24 @@ export default function PropertyDetailsScreen() {
           ))}
         </View>
 
-        <Pressable
-          style={styles.enquiryButton}
-          onPress={() => {}}
-        >
-          <Text style={styles.enquiryButtonText}>
-            Contact about this property
-          </Text>
-        </Pressable>
+       <Pressable
+  style={styles.enquiryButton}
+  onPress={() =>
+    router.push({
+      pathname: "/enquiry-confirmation",
+      params: {
+        propertyId: property.id,
+        title: property.title,
+        location: property.location,
+        price: property.price,
+      },
+    })
+  }
+>
+  <Text style={styles.enquiryButtonText}>
+    Enquire Now
+  </Text>
+</Pressable>
 
         <Text style={styles.disclaimer}>
           Sample property details for demonstration only.
