@@ -108,7 +108,7 @@ def get_user(
 
     return user
 
-@app.post("/properties", response_model=PropertyResponse, status_code=201)
+@app.post("/properties", status_code=201)
 def create_property(
     property_data: PropertyCreate,
     db: Session = Depends(get_db),
@@ -127,4 +127,14 @@ def create_property(
     db.commit()
     db.refresh(property)
 
-    return property
+    return {
+        "id": str(property.id),
+        "title": property.title,
+        "description": property.description,
+        "property_type": property.property_type,
+        "price": float(property.price),
+        "address": property.address,
+        "pincode": property.pincode,
+        "status": property.status,
+        "created_at": property.created_at.isoformat(),
+    }
