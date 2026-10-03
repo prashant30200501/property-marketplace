@@ -8,7 +8,7 @@ from app.schemas.user import UserCreate, UserResponse
 from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 import uuid
-
+from typing import List
 
 
 from sqlalchemy import select
@@ -116,6 +116,27 @@ def get_user(
         )
 
     return user
+
+
+@app.get("/properties/my", response_model=list[PropertyResponse])
+def get_my_properties(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "broker":
+        raise HTTPException(
+            status_code=403,
+            detail="Only brokers can access their properties.",
+        )
+
+    properties = (
+        db.query(Property)
+        .filter(Property.created_by == current_user.id)
+        .order_by(Property.created_at.desc())
+        .all()
+    )
+
+    return properties
 
 @app.post("/properties", response_model=PropertyResponse, status_code=201)
 def create_property(
