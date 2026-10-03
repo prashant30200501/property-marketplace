@@ -13,7 +13,6 @@ class PropertyCreate(BaseModel):
     price: Decimal
     address: str
     pincode: str
-    created_by: uuid.UUID
 
 
 class PropertyResponse(BaseModel):

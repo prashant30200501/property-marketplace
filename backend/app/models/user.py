@@ -8,6 +8,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
+from sqlalchemy import Column, String
+
 
 class User(Base):
     __tablename__ = "users"
@@ -65,3 +67,5 @@ class User(Base):
         onupdate=func.now(),
         nullable=False,
     )
+
+    password_hash = Column(String, nullable=True)

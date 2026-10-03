@@ -9,6 +9,8 @@ from fastapi import HTTPException
 from sqlalchemy.exc import IntegrityError
 import uuid
 
+
+
 from sqlalchemy import select
 
 from app.models import Property
@@ -17,6 +19,13 @@ from app.schemas.property import PropertyResponse
 from app.database import get_db
 
 from app.schemas.property import PropertyCreate, PropertyResponse
+
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy.exc import IntegrityError
+
+from app.auth import create_access_token, hash_password, verify_password
+from app.dependencies import get_current_user
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse 
 
 app = FastAPI(
     title="Nestora API",
@@ -108,11 +117,18 @@ def get_user(
 
     return user
 
-@app.post("/properties", status_code=201)
+@app.post("/properties", response_model=PropertyResponse, status_code=201)
 def create_property(
     property_data: PropertyCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if current_user.role != "broker":
+        raise HTTPException(
+            status_code=403,
+            detail="Only brokers can create properties.",
+        )
+
     property = Property(
         title=property_data.title,
         description=property_data.description,
@@ -120,21 +136,113 @@ def create_property(
         price=property_data.price,
         address=property_data.address,
         pincode=property_data.pincode,
-        created_by=property_data.created_by,
+        created_by=current_user.id,
     )
 
     db.add(property)
     db.commit()
     db.refresh(property)
 
+    return property
+
+@app.post("/auth/register", response_model=TokenResponse, status_code=201)
+def register(
+    register_data: RegisterRequest,
+    db: Session = Depends(get_db),
+):
+    existing_user = db.query(User).filter(
+        User.email == register_data.email
+    ).first()
+
+    if existing_user:
+        raise HTTPException(
+            status_code=409,
+            detail="A user with this email already exists.",
+        )
+
+    if register_data.role not in ["customer", "broker"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Role must be customer or broker.",
+        )
+
+    user = User(
+        full_name=register_data.full_name,
+        email=register_data.email,
+        password_hash=hash_password(register_data.password),
+        role=register_data.role,
+    )
+
+    db.add(user)
+
+    try:
+        db.commit()
+        db.refresh(user)
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Unable to create user.",
+        )
+
+    access_token = create_access_token(
+        user_id=str(user.id),
+        role=user.role,
+    )
+
     return {
-        "id": str(property.id),
-        "title": property.title,
-        "description": property.description,
-        "property_type": property.property_type,
-        "price": float(property.price),
-        "address": property.address,
-        "pincode": property.pincode,
-        "status": property.status,
-        "created_at": property.created_at.isoformat(),
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": str(user.id),
+        "role": user.role,
     }
+
+@app.post("/auth/login", response_model=TokenResponse)
+def login(
+    login_data: LoginRequest,
+    db: Session = Depends(get_db),
+):
+    user = db.query(User).filter(
+        User.email == login_data.email
+    ).first()
+
+    if user is None or not user.password_hash:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password.",
+        )
+
+    if not verify_password(
+        login_data.password,
+        user.password_hash,
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid email or password.",
+        )
+
+    access_token = create_access_token(
+        user_id=str(user.id),
+        role=user.role,
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": str(user.id),
+        "role": user.role,
+    }
+
+@app.get("/auth/me")
+def get_me(
+    current_user: User = Depends(get_current_user),
+):
+    return {
+        "id": str(current_user.id),
+        "full_name": current_user.full_name,
+        "email": current_user.email,
+        "role": current_user.role,
+        "phone": current_user.phone,
+        "phone_verified": current_user.phone_verified,
+        "pincode": current_user.pincode,
+    } 
