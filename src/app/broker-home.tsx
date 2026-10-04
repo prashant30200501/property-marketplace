@@ -67,61 +67,57 @@ export default function BrokerHomeScreen() {
       {/* Quick actions */}
       <Text style={styles.sectionTitle}>Quick actions</Text>
 
-      <View style={styles.actionsContainer}>
-        <Pressable
-  style={styles.actionCard}
-  onPress={() => router.push("/broker-enquiries")}
->
-  <View style={styles.actionIconContainer}>
-    <Text style={styles.actionIcon}>💬</Text>
-  </View>
+     <View style={styles.actionsContainer}>
 
-  <View style={styles.actionTextContainer}>
-    <Text style={styles.actionTitle}>Customer enquiries</Text>
-    <Text style={styles.actionSubtitle}>
-      Keep track of interested customers
+  {/* Customer enquiries */}
+  <Pressable
+    style={styles.actionCard}
+    onPress={() => router.push("/broker-enquiries")}
+  >
+    <View style={styles.actionIconContainer}>
+      <Text style={styles.actionIcon}>💬</Text>
+    </View>
+
+    <View style={styles.actionTextContainer}>
+      <Text style={styles.actionTitle}>Customer enquiries</Text>
+      <Text style={styles.actionSubtitle}>
+        Keep track of interested customers
+      </Text>
+    </View>
+
+    <Text style={styles.arrow}>›</Text>
+  </Pressable>
+
+  {/* My properties */}
+  <Pressable
+    style={styles.actionCard}
+    onPress={() => router.push("/broker-properties")}
+  >
+    <View style={styles.actionIconContainer}>
+      <Text style={styles.actionIcon}>🏘️</Text>
+    </View>
+
+    <View style={styles.actionTextContainer}>
+      <Text style={styles.actionTitle}>My properties</Text>
+      <Text style={styles.actionSubtitle}>
+        View and manage your listings
+      </Text>
+    </View>
+
+    <Text style={styles.arrow}>›</Text>
+  </Pressable>
+
+  {/* Add property */}
+  <Pressable
+    onPress={() => router.push("/add-property")}
+    style={styles.addPropertyButton}
+  >
+    <Text style={styles.addPropertyButtonText}>
+      + Add Property
     </Text>
-  </View>
+  </Pressable>
 
-  <Text style={styles.arrow}>›</Text>
-</Pressable>
-
-        <Pressable
-          style={styles.actionCard}
-          onPress={() => {}}
-        >
-          <View style={styles.actionIconContainer}>
-            <Text style={styles.actionIcon}>🏘️</Text>
-          </View>
-
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionTitle}>My properties</Text>
-            <Text style={styles.actionSubtitle}>
-              View and manage your listings
-            </Text>
-          </View>
-
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
-
-        <Pressable
-          style={styles.actionCard}
-          onPress={() => {}}
-        >
-          <View style={styles.actionIconContainer}>
-            <Text style={styles.actionIcon}>💬</Text>
-          </View>
-
-          <View style={styles.actionTextContainer}>
-            <Text style={styles.actionTitle}>Customer enquiries</Text>
-            <Text style={styles.actionSubtitle}>
-              Keep track of interested customers
-            </Text>
-          </View>
-
-          <Text style={styles.arrow}>›</Text>
-        </Pressable>
-      </View>
+</View>
 
       {/* Recent activity */}
       <View style={styles.sectionHeader}>
@@ -348,5 +344,19 @@ logoutText: {
   color: "#173F35",
   fontSize: 13,
   fontWeight: "700",
+},
+
+addPropertyButton: {
+  backgroundColor: "#D4A017",
+  borderRadius: 12,
+  paddingVertical: 14,
+  alignItems: "center",
+  marginBottom: 16,
+},
+
+addPropertyButtonText: {
+  color: "#FFFFFF",
+  fontSize: 15,
+  fontWeight: "800",
 },
 });

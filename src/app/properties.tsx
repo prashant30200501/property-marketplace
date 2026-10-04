@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
     Pressable,
     ScrollView,
@@ -8,6 +8,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { getProperties } from "../services/api";
 
 const propertyTypes = [
   "All",
@@ -18,64 +19,54 @@ const propertyTypes = [
   "Office",
 ];
 
-const properties = [
-  {
-    id: "1",
-    title: "Modern Family Villa",
-    location: "Vaishali Nagar, Jaipur",
-    price: "₹85 Lakh",
-    type: "Individual House",
-    listingType: "Buy",
-    details: "3 BHK • 1,850 sq.ft.",
-    emoji: "🏡",
-  },
-  {
-    id: "2",
-    title: "Premium City Apartment",
-    location: "Jagatpura, Jaipur",
-    price: "₹52 Lakh",
-    type: "Flat",
-    listingType: "Buy",
-    details: "2 BHK • 1,200 sq.ft.",
-    emoji: "🏢",
-  },
-  {
-    id: "3",
-    title: "Comfortable Student PG",
-    location: "Gopalpura, Jaipur",
-    price: "₹8,000/month",
-    type: "PG",
-    listingType: "Rent",
-    details: "Single room • Furnished",
-    emoji: "🛏️",
-  },
-  {
-    id: "4",
-    title: "Commercial Office Space",
-    location: "Malviya Nagar, Jaipur",
-    price: "₹1.2 Crore",
-    type: "Office",
-    listingType: "Buy",
-    details: "Office • 2,000 sq.ft.",
-    emoji: "🏬",
-  },
-  {
-    id: "5",
-    title: "Retail Commercial Space",
-    location: "Tonk Road, Jaipur",
-    price: "₹35,000/month",
-    type: "Commercial Property",
-    listingType: "Rent",
-    details: "Shop • 850 sq.ft.",
-    emoji: "🏪",
-  },
-];
+
 
 export default function PropertiesScreen() {
     const router = useRouter();
  const [selectedListingType, setSelectedListingType] = useState("Buy");
 const [selectedPropertyType, setSelectedPropertyType] = useState("All");
 const [search, setSearch] = useState("");
+const [properties, setProperties] = useState<any[]>([]);
+const [loading, setLoading] = useState(true);
+const [error, setError] = useState("");
+useEffect(() => {
+  loadProperties();
+}, []);
+
+async function loadProperties() {
+  try {
+    setLoading(true);
+    setError("");
+
+    const data = await getProperties();
+
+    const formattedProperties = data.map((property: any) => ({
+      id: property.id,
+      title: property.title,
+      location: property.address,
+      price: `₹${Number(property.price).toLocaleString("en-IN")}`,
+      type:
+        property.property_type === "residential"
+          ? "Flat"
+          : property.property_type === "commercial"
+          ? "Commercial Property"
+          : property.property_type,
+      listingType: "Buy",
+      details: property.description || "Property details available",
+      emoji:
+        property.property_type === "commercial"
+          ? "🏬"
+          : "🏡",
+    }));
+
+    setProperties(formattedProperties);
+  } catch (error) {
+    console.error("Failed to load properties:", error);
+    setError("Unable to load properties.");
+  } finally {
+    setLoading(false);
+  }
+}
 
 const filteredProperties = properties.filter((property) => {
   const matchesListingType =
@@ -203,6 +194,18 @@ const filteredProperties = properties.filter((property) => {
         })}
       </ScrollView>
 
+      {loading && (
+  <Text style={styles.loadingText}>
+    Loading properties...
+  </Text>
+)}
+
+{error && !loading && (
+  <Text style={styles.errorText}>
+    {error}
+  </Text>
+)}
+
       {/* Results */}
       <View style={styles.resultsHeader}>
         <Text style={styles.sectionTitle}>Available properties</Text>
@@ -211,7 +214,7 @@ const filteredProperties = properties.filter((property) => {
         </Text>
       </View>
 
-      {filteredProperties.length > 0 ? (
+      {!loading && filteredProperties.length > 0 ? (
         filteredProperties.map((property) => (
           <Pressable
   key={property.id}
@@ -287,8 +290,8 @@ const filteredProperties = properties.filter((property) => {
       )}
 
       <Text style={styles.disclaimer}>
-        Sample listings for demonstration only.
-      </Text>
+  Properties from Nestora.
+</Text>
     </ScrollView>
   );
 }
@@ -530,5 +533,19 @@ listingTypeText: {
 
 listingTypeTextSelected: {
   color: "#FFFFFF",
+},
+
+loadingText: {
+  textAlign: "center",
+  color: "#668674",
+  fontSize: 14,
+  marginVertical: 20,
+},
+
+errorText: {
+  textAlign: "center",
+  color: "#B44A4A",
+  fontSize: 14,
+  marginVertical: 20,
 },
 });

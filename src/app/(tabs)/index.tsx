@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { loginUser } from "../../services/api";
 
 const COLORS = {
   navy: "#0D1B2A",
@@ -40,7 +41,7 @@ export default function LoginScreen() {
   const [otp, setOtp] = useState("");
   const [otpSent, setOtpSent] = useState(false);
 
-  const [brokerId, setBrokerId] = useState("");
+  
   const [showPassword, setShowPassword] = useState(false);
 
   const router = useRouter();
@@ -50,79 +51,114 @@ export default function LoginScreen() {
 
   const handleRoleChange = (newRole: Role) => {
     setRole(newRole);
-    setBrokerId("");
+  
     setOtp("");
     setOtpSent(false);
   };
 
-  const handleLogin = () => {
-    if (role === "Broker" && !brokerId.trim()) {
+  const handleLogin = async () => {
+
+
+
+  if (!identifier.trim()) {
+    
+    Alert.alert(
+      "Missing details",
+      "Please enter your phone number or email."
+    );
+    return;
+  }
+
+  if (isEmail) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
+      Alert.alert("Invalid email", "Please enter a valid email address.");
+      return;
+    }
+
+    if (!password.trim()) {
       Alert.alert(
-        "Broker ID required",
-        "Please enter your Broker or Agency ID."
+        "Password required",
+        "Please enter your Nestora password."
       );
       return;
     }
 
-    if (!identifier.trim()) {
-      Alert.alert(
-        "Missing details",
-        "Please enter your phone number or email."
+    try {
+      const data = await loginUser(
+        identifier.trim().toLowerCase(),
+        password
       );
-      return;
-    }
 
-    if (isEmail) {
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(identifier.trim())) {
-        Alert.alert("Invalid email", "Please enter a valid email address.");
-        return;
-      }
+      // Make sure the selected role matches the backend role.
+      const backendRole =
+        data.role === "broker" ? "Broker" : "Customer";
 
-      if (!password.trim()) {
+      if (backendRole !== role) {
         Alert.alert(
-          "Password required",
-          "Please enter your Nestora password."
+          "Role mismatch",
+          `This account is registered as ${backendRole}. Please select ${backendRole} to continue.`
         );
         return;
       }
 
-     router.replace(
-  role === "Customer"
-    ? "/customer-home"
-    : "/broker-home"
-);
-return;
-    }
-
-    // Phone login
-    if (!/^\+?[\d\s()-]{7,}$/.test(identifier.trim())) {
       Alert.alert(
-        "Invalid phone number",
-        "Please enter a valid phone number or email address."
+        "Welcome back",
+        "You have successfully signed in.",
+        [
+          {
+            text: "Continue",
+            onPress: () =>
+              router.replace(
+                backendRole === "Customer"
+                  ? "/customer-home"
+                  : "/broker-home"
+              ),
+          },
+        ]
       );
-      return;
-    }
+    } catch (error) {
+      console.error("Login failed:", error);
 
-    if (!otpSent) {
-      setOtpSent(true);
       Alert.alert(
-        "OTP preview",
-        "The OTP interface is ready. Actual SMS delivery will be added later."
+        "Login failed",
+        "Invalid email or password. Please try again."
       );
-      return;
     }
 
-    if (!otp.trim()) {
-      Alert.alert("Missing OTP", "Please enter the OTP.");
-      return;
-    }
-router.replace(
-  role === "Customer"
-    ? "/customer-home"
-    : "/broker-home"
-);
-return;
-  };
+    return;
+  }
+
+  // Phone login remains temporary until OTP backend is implemented.
+  if (!/^\+?[\d\s()-]{7,}$/.test(identifier.trim())) {
+    Alert.alert(
+      "Invalid phone number",
+      "Please enter a valid phone number or email address."
+    );
+    return;
+  }
+
+  if (!otpSent) {
+    setOtpSent(true);
+
+    Alert.alert(
+      "OTP preview",
+      "The OTP interface is ready. Actual SMS delivery will be added later."
+    );
+
+    return;
+  }
+
+  if (!otp.trim()) {
+    Alert.alert("Missing OTP", "Please enter the OTP.");
+    return;
+  }
+
+  router.replace(
+    role === "Customer"
+      ? "/customer-home"
+      : "/broker-home"
+  );
+};
 
   // Keep your existing return (...) here for now.
 
@@ -190,26 +226,7 @@ return;
               })}
             </View>
 
-           {/* Broker / Agency ID */}
-{role === "Broker" && (
-  <>
-    <Text style={styles.fieldLabel}>BROKER / AGENCY ID</Text>
 
-    <View style={styles.inputContainer}>
-      <Text style={styles.inputIcon}>▣</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="Enter your Broker / Agency ID"
-        placeholderTextColor={COLORS.muted}
-        value={brokerId}
-        onChangeText={setBrokerId}
-        autoCapitalize="characters"
-        autoCorrect={false}
-        accessibilityLabel="Broker or Agency ID"
-      />
-    </View>
-  </>
-)}
 
 {/* Phone or Email */}
 <Text style={styles.fieldLabel}>PHONE NUMBER OR EMAIL</Text>
