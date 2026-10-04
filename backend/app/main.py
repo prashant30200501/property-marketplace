@@ -14,11 +14,15 @@ from typing import List
 from sqlalchemy import select
 
 from app.models import Property
-from app.schemas.property import PropertyResponse
+
 
 from app.database import get_db
 
-from app.schemas.property import PropertyCreate, PropertyResponse
+from app.schemas.property import (
+    PropertyCreate,
+    PropertyResponse,
+    PropertyUpdate,
+)
 
 from fastapi import Depends, FastAPI, HTTPException
 from sqlalchemy.exc import IntegrityError
@@ -137,6 +141,43 @@ def get_my_properties(
     )
 
     return properties
+
+@app.put("/properties/{property_id}", response_model=PropertyResponse)
+def update_property(
+    property_id: uuid.UUID,
+    property_data: PropertyUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if current_user.role != "broker":
+        raise HTTPException(
+            status_code=403,
+            detail="Only brokers can update properties.",
+        )
+
+    property = db.get(Property, property_id)
+
+    if property is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Property not found.",
+        )
+
+    if property.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only update your own properties.",
+        )
+
+    update_data = property_data.model_dump(exclude_unset=True)
+
+    for field, value in update_data.items():
+        setattr(property, field, value)
+
+    db.commit()
+    db.refresh(property)
+
+    return property
 
 @app.post("/properties", response_model=PropertyResponse, status_code=201)
 def create_property(

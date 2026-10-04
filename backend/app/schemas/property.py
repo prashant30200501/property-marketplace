@@ -14,6 +14,15 @@ class PropertyCreate(BaseModel):
     address: str
     pincode: str
 
+from typing import Optional
+
+class PropertyUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    property_type: Optional[str] = None
+    price: Optional[Decimal] = None
+    address: Optional[str] = None
+    pincode: Optional[str] = None
 
 class PropertyResponse(BaseModel):
     id: uuid.UUID
