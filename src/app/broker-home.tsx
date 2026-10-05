@@ -25,6 +25,13 @@ export default function BrokerHomeScreen() {
         </View>
 
         <Pressable
+    style={styles.profileButton}
+    onPress={() => router.push("/broker-profile")}
+  >
+    <Text style={styles.profileIcon}>👤</Text>
+  </Pressable>
+
+        <Pressable
   style={styles.logoutButton}
   onPress={() => router.replace("/(tabs)")}
 >

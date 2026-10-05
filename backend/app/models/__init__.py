@@ -4,7 +4,8 @@ from app.models.broker_profile import BrokerProfile
 from app.models.enquiry import Enquiry
 from app.models.enquiry_activity import EnquiryActivity
 from app.models.enquiry_followup import EnquiryFollowup
-
+from app.models.broker_verification import BrokerVerification
+from app.models.broker_verification import BrokerVerification, VerificationStatus
 __all__ = [
     "User",
     "Property",
