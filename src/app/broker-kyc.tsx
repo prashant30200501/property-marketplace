@@ -213,6 +213,7 @@ export default function BrokerKycScreen() {
     return (
       <KycCamera
         facing={activeCamera === "selfie" ? "front" : "back"}
+        documentType={activeCamera}
         title={
           activeCamera === "pan"
             ? "Capture PAN card"
@@ -383,26 +384,7 @@ supporting evidence during manual verification.
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : null}
-{verificationStatus !== "under_review" &&
- verificationStatus !== "verified" &&
- verificationStatus !== "suspended" ? (
-  <Pressable
-    style={[
-      styles.submitButton,
-      submitting && styles.submitButtonDisabled,
-    ]}
-    onPress={handleSubmit}
-    disabled={submitting}
-  >
-    {submitting ? (
-      <ActivityIndicator color="#FFFFFF" />
-    ) : (
-      <Text style={styles.submitButtonText}>
-        Submit for verification
-      </Text>
-    )}
-  </Pressable>
-) : null}
+
 
       <Text style={styles.footerText}>
         By submitting, you confirm that the information provided is
@@ -452,8 +434,31 @@ supporting evidence during manual verification.
   uploading={uploadingDocument === "selfie"}
   onPress={() => !isLocked && setActiveCamera("selfie")}
 />
+
+{verificationStatus !== "under_review" &&
+ verificationStatus !== "verified" &&
+ verificationStatus !== "suspended" ? (
+  <Pressable
+    style={[
+      styles.submitButton,
+      submitting && styles.submitButtonDisabled,
+    ]}
+    onPress={handleSubmit}
+    disabled={submitting}
+  >
+    {submitting ? (
+      <ActivityIndicator color="#FFFFFF" />
+    ) : (
+      <Text style={styles.submitButtonText}>
+        Submit for verification
+      </Text>
+    )}
+  </Pressable>
+) : null}
     </ScrollView>
   );
+
+  
 }
 
 const styles = StyleSheet.create({

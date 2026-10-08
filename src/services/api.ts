@@ -1,6 +1,7 @@
+import { File } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
+import { fetch as expoFetch } from "expo/fetch";
 import { Platform } from "react-native";
-
 const API_BASE_URL = "https://nestora-api-3xpy.onrender.com";
 
 const TOKEN_KEY = "nestora_access_token";
@@ -295,7 +296,6 @@ export type KycDocumentType =
   | "aadhaar_front"
   | "aadhaar_back"
   | "selfie";
-
 export async function uploadKycDocument(
   documentType: KycDocumentType,
   uri: string,
@@ -306,15 +306,12 @@ export async function uploadKycDocument(
     throw new Error("You must be logged in.");
   }
 
+  const file = new File(uri);
+
   const formData = new FormData();
+  formData.append("file", file);
 
-  formData.append("file", {
-    uri,
-    name: `${documentType}.jpg`,
-    type: "image/jpeg",
-  } as any);
-
-  const response = await fetch(
+  const response = await expoFetch(
     `${API_BASE_URL}/broker/verification/documents/${documentType}`,
     {
       method: "POST",

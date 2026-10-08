@@ -2,33 +2,46 @@ import {
     CameraView,
     useCameraPermissions,
     type CameraType,
+    type FlashMode,
 } from "expo-camera";
 import { useRef, useState } from "react";
 import {
     ActivityIndicator,
     Pressable,
+    SafeAreaView,
     StyleSheet,
     Text,
     View,
 } from "react-native";
 
-type Props = {
+type KycCameraProps = {
   facing: CameraType;
   title: string;
+  documentType?: "pan" | "aadhaar_front" | "aadhaar_back" | "selfie";
   onCapture: (uri: string) => void;
   onCancel: () => void;
 };
 
 export default function KycCamera({
-  facing,
+  facing: initialFacing,
   title,
+  documentType,
   onCapture,
   onCancel,
-}: Props) {
-  const cameraRef = useRef<CameraView | null>(null);
+}: KycCameraProps) {
+  const cameraRef = useRef<CameraView>(null);
+
   const [permission, requestPermission] = useCameraPermissions();
-  const [ready, setReady] = useState(false);
+
+  const [facing, setFacing] = useState<CameraType>(initialFacing);
+
+  const [flash, setFlash] = useState<FlashMode>("off");
+
+  const [torch, setTorch] = useState(false);
+
   const [capturing, setCapturing] = useState(false);
+
+  const isSelfie = documentType === "selfie";
 
   if (!permission) {
     return (
@@ -40,14 +53,14 @@ export default function KycCamera({
 
   if (!permission.granted) {
     return (
-      <View style={styles.permissionContainer}>
+      <SafeAreaView style={styles.permissionScreen}>
         <Text style={styles.permissionTitle}>
           Camera permission required
         </Text>
 
         <Text style={styles.permissionText}>
-          Nestora needs camera access to capture your verification
-          document directly from the camera.
+          Nestora needs camera access to capture your KYC document
+          or verification selfie.
         </Text>
 
         <Pressable
@@ -63,14 +76,36 @@ export default function KycCamera({
           style={styles.cancelButton}
           onPress={onCancel}
         >
-          <Text style={styles.cancelButtonText}>Cancel</Text>
+          <Text style={styles.cancelText}>Cancel</Text>
         </Pressable>
-      </View>
+      </SafeAreaView>
     );
   }
 
-  const capture = async () => {
-    if (!cameraRef.current || !ready || capturing) {
+  const toggleCamera = () => {
+    setFacing((current) =>
+      current === "back" ? "front" : "back",
+    );
+
+    setTorch(false);
+  };
+
+  const toggleFlash = () => {
+    setFlash((current) => {
+      if (current === "off") {
+        return "on";
+      }
+
+      if (current === "on") {
+        return "auto";
+      }
+
+      return "off";
+    });
+  };
+
+  const takePicture = async () => {
+    if (!cameraRef.current || capturing) {
       return;
     }
 
@@ -78,12 +113,15 @@ export default function KycCamera({
       setCapturing(true);
 
       const photo = await cameraRef.current.takePictureAsync({
-        quality: 0.75,
+        quality: 0.85,
+        skipProcessing: false,
       });
 
       if (photo?.uri) {
         onCapture(photo.uri);
       }
+    } catch (error) {
+      console.error("KYC camera capture failed:", error);
     } finally {
       setCapturing(false);
     }
@@ -95,45 +133,97 @@ export default function KycCamera({
         ref={cameraRef}
         style={StyleSheet.absoluteFill}
         facing={facing}
-        mirror={facing === "front"}
-        onCameraReady={() => setReady(true)}
+        flash={isSelfie ? "screen" : flash}
+        enableTorch={torch}
+        mode="picture"
+        autofocus="on"
+        mirror={isSelfie}
       />
 
-      <View style={styles.overlay}>
+      {/* Top controls */}
+      <SafeAreaView style={styles.topArea}>
         <View style={styles.topBar}>
           <Pressable
-            style={styles.closeButton}
+            style={styles.iconButton}
             onPress={onCancel}
           >
-            <Text style={styles.closeText}>✕</Text>
+            <Text style={styles.iconText}>✕</Text>
           </Pressable>
 
           <Text style={styles.title}>{title}</Text>
 
-          <View style={styles.placeholder} />
-        </View>
+          <View style={styles.topActions}>
+            {!isSelfie && (
+              <Pressable
+                style={styles.iconButton}
+                onPress={toggleFlash}
+              >
+                <Text style={styles.iconText}>
+                  {flash === "off"
+                    ? "⚡"
+                    : flash === "on"
+                      ? "⚡"
+                      : "A⚡"}
+                </Text>
+              </Pressable>
+            )}
 
-        <View style={styles.frame}>
-          <View style={styles.cornerTopLeft} />
-          <View style={styles.cornerTopRight} />
-          <View style={styles.cornerBottomLeft} />
-          <View style={styles.cornerBottomRight} />
+            <Pressable
+              style={styles.iconButton}
+              onPress={() => setTorch((current) => !current)}
+            >
+              <Text style={styles.iconText}>
+                {torch ? "🔦" : "💡"}
+              </Text>
+            </Pressable>
+          </View>
         </View>
+      </SafeAreaView>
 
-        <View style={styles.bottomBar}>
-          <Text style={styles.instruction}>
-            {facing === "front"
-              ? "Position your face inside the frame"
-              : "Position the document inside the frame"}
+      {/* Document guide */}
+      {!isSelfie && (
+        <View pointerEvents="none" style={styles.guideContainer}>
+          <View style={styles.documentGuide} />
+
+          <Text style={styles.guideText}>
+            Align the document inside the frame
           </Text>
+        </View>
+      )}
+
+      {/* Selfie guide */}
+      {isSelfie && (
+        <View pointerEvents="none" style={styles.selfieGuideContainer}>
+          <View style={styles.selfieGuide} />
+
+          <Text style={styles.selfieGuideText}>
+            Position your face inside the circle
+          </Text>
+        </View>
+      )}
+
+      {/* Bottom controls */}
+      <SafeAreaView style={styles.bottomArea}>
+        <View style={styles.bottomControls}>
+          <Pressable
+            style={styles.flipButton}
+            onPress={toggleCamera}
+          >
+            <Text style={styles.flipText}>
+              🔄
+            </Text>
+            <Text style={styles.flipLabel}>
+              Flip
+            </Text>
+          </Pressable>
 
           <Pressable
             style={[
               styles.captureButton,
-              (!ready || capturing) && styles.captureDisabled,
+              capturing && styles.captureButtonDisabled,
             ]}
-            onPress={capture}
-            disabled={!ready || capturing}
+            onPress={takePicture}
+            disabled={capturing}
           >
             {capturing ? (
               <ActivityIndicator color="#173F35" />
@@ -141,8 +231,10 @@ export default function KycCamera({
               <View style={styles.captureInner} />
             )}
           </Pressable>
+
+          <View style={styles.bottomSpacer} />
         </View>
-      </View>
+      </SafeAreaView>
     </View>
   );
 }
@@ -160,11 +252,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  permissionContainer: {
+  permissionScreen: {
     flex: 1,
     backgroundColor: "#173F35",
-    padding: 28,
+    alignItems: "center",
     justifyContent: "center",
+    padding: 30,
   },
 
   permissionTitle: {
@@ -172,21 +265,22 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: "700",
     marginBottom: 12,
+    textAlign: "center",
   },
 
   permissionText: {
-    color: "#DCE9E4",
+    color: "#E8EFEA",
     fontSize: 15,
     lineHeight: 22,
+    textAlign: "center",
     marginBottom: 28,
   },
 
   primaryButton: {
-    height: 52,
     backgroundColor: "#FFFFFF",
+    paddingHorizontal: 28,
+    paddingVertical: 14,
     borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
   },
 
   primaryButtonText: {
@@ -196,122 +290,136 @@ const styles = StyleSheet.create({
   },
 
   cancelButton: {
-    height: 52,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 10,
+    marginTop: 18,
   },
 
-  cancelButtonText: {
+  cancelText: {
     color: "#FFFFFF",
     fontSize: 15,
-    fontWeight: "600",
   },
 
-  overlay: {
-    ...StyleSheet.absoluteFill,
-    justifyContent: "space-between",
+  topArea: {
+    zIndex: 10,
   },
 
   topBar: {
-    height: 100,
-    paddingHorizontal: 20,
-    paddingTop: 55,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 16,
+    paddingTop: 8,
+  },
+
+  topActions: {
+    flexDirection: "row",
+    gap: 8,
+  },
+
+  iconButton: {
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: "rgba(0,0,0,0.55)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  iconText: {
+    color: "#FFFFFF",
+    fontSize: 20,
   },
 
   title: {
     color: "#FFFFFF",
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: "700",
-  },
-
-  closeButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  closeText: {
-    color: "#FFFFFF",
-    fontSize: 18,
-  },
-
-  placeholder: {
-    width: 40,
-  },
-
-  frame: {
-    width: "88%",
-    height: 240,
-    alignSelf: "center",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.55)",
-  },
-
-  cornerTopLeft: {
-    position: "absolute",
-    left: -2,
-    top: -2,
-    width: 32,
-    height: 32,
-    borderLeftWidth: 4,
-    borderTopWidth: 4,
-    borderColor: "#FFFFFF",
-  },
-
-  cornerTopRight: {
-    position: "absolute",
-    right: -2,
-    top: -2,
-    width: 32,
-    height: 32,
-    borderRightWidth: 4,
-    borderTopWidth: 4,
-    borderColor: "#FFFFFF",
-  },
-
-  cornerBottomLeft: {
-    position: "absolute",
-    left: -2,
-    bottom: -2,
-    width: 32,
-    height: 32,
-    borderLeftWidth: 4,
-    borderBottomWidth: 4,
-    borderColor: "#FFFFFF",
-  },
-
-  cornerBottomRight: {
-    position: "absolute",
-    right: -2,
-    bottom: -2,
-    width: 32,
-    height: 32,
-    borderRightWidth: 4,
-    borderBottomWidth: 4,
-    borderColor: "#FFFFFF",
-  },
-
-  bottomBar: {
-    alignItems: "center",
-    paddingBottom: 50,
-    paddingHorizontal: 20,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    paddingTop: 20,
-  },
-
-  instruction: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    marginBottom: 20,
+    flex: 1,
     textAlign: "center",
+    marginHorizontal: 10,
+  },
+
+  guideContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "28%",
+    alignItems: "center",
+  },
+
+  documentGuide: {
+    width: "86%",
+    aspectRatio: 1.586,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    borderRadius: 14,
+  },
+
+  guideText: {
+    color: "#FFFFFF",
+    marginTop: 18,
+    fontSize: 14,
+    fontWeight: "600",
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+
+  selfieGuideContainer: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    top: "22%",
+    alignItems: "center",
+  },
+
+  selfieGuide: {
+    width: 250,
+    height: 320,
+    borderWidth: 3,
+    borderColor: "#FFFFFF",
+    borderRadius: 150,
+  },
+
+  selfieGuideText: {
+    color: "#FFFFFF",
+    marginTop: 18,
+    fontSize: 14,
+    fontWeight: "600",
+    backgroundColor: "rgba(0,0,0,0.45)",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+  },
+
+  bottomArea: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+
+  bottomControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 30,
+    paddingBottom: 20,
+  },
+
+  flipButton: {
+    width: 64,
+    alignItems: "center",
+  },
+
+  flipText: {
+    fontSize: 25,
+  },
+
+  flipLabel: {
+    color: "#FFFFFF",
+    fontSize: 12,
+    marginTop: 4,
   },
 
   captureButton: {
@@ -321,17 +429,24 @@ const styles = StyleSheet.create({
     backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
+    borderWidth: 5,
+    borderColor: "rgba(255,255,255,0.6)",
   },
 
-  captureDisabled: {
-    opacity: 0.5,
+  captureButtonDisabled: {
+    opacity: 0.7,
   },
 
   captureInner: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    backgroundColor: "#FFFFFF",
     borderWidth: 3,
     borderColor: "#173F35",
+  },
+
+  bottomSpacer: {
+    width: 64,
   },
 });
