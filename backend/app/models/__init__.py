@@ -6,6 +6,7 @@ from app.models.enquiry_activity import EnquiryActivity
 from app.models.enquiry_followup import EnquiryFollowup
 from app.models.broker_verification import BrokerVerification
 from app.models.broker_verification import BrokerVerification, VerificationStatus
+from app.models.kyc_document import KycDocument
 __all__ = [
     "User",
     "Property",

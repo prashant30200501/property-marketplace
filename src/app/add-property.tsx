@@ -74,7 +74,7 @@ export default function AddPropertyScreen() {
         price: numericPrice,
         address: address.trim(),
         pincode: pincode.trim(),
-        created_by: TEST_BROKER_ID,
+        
       });
 
       Alert.alert(

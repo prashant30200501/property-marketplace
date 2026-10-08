@@ -14,6 +14,7 @@ import {
     TextInput,
     View,
 } from "react-native";
+import { registerUser } from "../services/api";
 
 const COLORS = {
   navy: "#0D1B2A",
@@ -46,44 +47,85 @@ export default function RegisterScreen() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleRegister = () => {
-   if (
-  !fullName.trim() ||
-  !email.trim() ||
-  !phone.trim() ||
-  !password.trim() ||
-  !confirmPassword.trim()
-) {
-  showAlert(
-  "Missing details",
-  "Please fill in all required fields, including password confirmation."
-);
-  return;
-}
-
-    if (role === "Broker" && !agencyName.trim()) {
-      Alert.alert("Agency name required", "Please enter your agency name.");
-      return;
-    }
-
-    if (password.length < 8) {
-      Alert.alert(
-        "Weak password",
-        "Your password must be at least 8 characters long."
-      );
-      return;
-    }
-
-    if (password !== confirmPassword) {
-      Alert.alert("Password mismatch", "Your passwords do not match.");
-      return;
-    }
-
+ const handleRegister = async () => {
+  if (
+    !fullName.trim() ||
+    !email.trim() ||
+    !phone.trim() ||
+    !password.trim() ||
+    !confirmPassword.trim()
+  ) {
     Alert.alert(
-      "Registration UI ready",
-      `Your ${role.toLowerCase()} account form is ready. We'll connect it to the backend next.`
+      "Missing details",
+      "Please fill in all required fields, including password confirmation."
     );
-  };
+    return;
+  }
+
+  if (role === "Broker" && !agencyName.trim()) {
+    Alert.alert(
+      "Agency name required",
+      "Please enter your agency name."
+    );
+    return;
+  }
+
+  if (password.length < 8) {
+    Alert.alert(
+      "Weak password",
+      "Your password must be at least 8 characters long."
+    );
+    return;
+  }
+
+  if (password !== confirmPassword) {
+    Alert.alert(
+      "Password mismatch",
+      "Your passwords do not match."
+    );
+    return;
+  }
+
+  try {
+    const result = await registerUser({
+      full_name: fullName.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      role: role === "Broker" ? "broker" : "customer",
+    });
+
+    if (result.role === "broker") {
+      Alert.alert(
+        "Account created",
+        "Your broker account has been created. Please complete your KYC verification.",
+        [
+          {
+            text: "Continue",
+            onPress: () => router.replace("/broker-kyc"),
+          },
+        ]
+      );
+    } else {
+      Alert.alert(
+        "Account created",
+        "Your account has been created successfully.",
+        [
+          {
+            text: "Continue",
+            onPress: () => router.replace("/"),
+          },
+        ]
+      );
+    }
+  } catch (error) {
+    Alert.alert(
+      "Registration failed",
+      error instanceof Error
+        ? error.message
+        : "Unable to create your account."
+    );
+  }
+};
 
   const renderInput = (
     label: string,

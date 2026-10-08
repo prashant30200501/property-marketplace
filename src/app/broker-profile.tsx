@@ -227,19 +227,19 @@ export default function BrokerProfileScreen() {
             <TimelineRow
               title="KYC submitted"
               completed={Boolean(verification?.submitted_at)}
-              date={verification?.submitted_at}
+              date={verification?.submitted_at ?? null}
             />
 
             <TimelineRow
               title="Admin review"
               completed={Boolean(verification?.reviewed_at)}
-              date={verification?.reviewed_at}
+              date={verification?.reviewed_at ?? null}
             />
 
             <TimelineRow
               title="Verification completed"
               completed={Boolean(verification?.verified_at)}
-              date={verification?.verified_at}
+              date={verification?.verified_at ?? null}
             />
           </View>
         </>

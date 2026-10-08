@@ -77,6 +77,34 @@ export async function getCurrentUser() {
   return response.json();
 }
 
+export async function registerUser(data: {
+  full_name: string;
+  email: string;
+  password: string;
+  role: "customer" | "broker";
+}) {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Registration failed: ${response.status} ${errorText}`
+    );
+  }
+
+  const result = await response.json();
+
+  await saveToken(result.access_token);
+
+  return result;
+}
+
 export async function getProperties() {
   const response = await fetch(`${API_BASE_URL}/properties`);
 
@@ -213,6 +241,95 @@ export async function getBrokerVerificationStatus(): Promise<BrokerVerificationS
 
     throw new Error(
       `Failed to fetch verification status: ${response.status} ${errorText}`,
+    );
+  }
+
+  return response.json();
+}
+
+
+
+export type BrokerVerificationSubmit = {
+  pan_number: string;
+  business_name: string;
+  rera_registration_number?: string;
+  firm_name?: string;
+  latitude?: string;
+  longitude?: string;
+};
+
+export async function submitBrokerVerification(
+  data: BrokerVerificationSubmit,
+) {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("You must be logged in.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/broker/verification/submit`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(data),
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    throw new Error(
+      `Failed to submit verification: ${response.status} ${errorText}`,
+    );
+  }
+
+  return response.json();
+}
+
+export type KycDocumentType =
+  | "pan"
+  | "aadhaar_front"
+  | "aadhaar_back"
+  | "selfie";
+
+export async function uploadKycDocument(
+  documentType: KycDocumentType,
+  uri: string,
+) {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("You must be logged in.");
+  }
+
+  const formData = new FormData();
+
+  formData.append("file", {
+    uri,
+    name: `${documentType}.jpg`,
+    type: "image/jpeg",
+  } as any);
+
+  const response = await fetch(
+    `${API_BASE_URL}/broker/verification/documents/${documentType}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    },
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+
+    throw new Error(
+      `Failed to upload ${documentType}: ${response.status} ${errorText}`,
     );
   }
 

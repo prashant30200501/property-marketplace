@@ -1,11 +1,12 @@
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile , status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 from typing import List
 from app.models import User
 from app.schemas.user import UserCreate, UserResponse
-from fastapi import HTTPException
+from fastapi.responses import Response
+
 from sqlalchemy.exc import IntegrityError
 import uuid
 from typing import List
@@ -16,11 +17,13 @@ from app.models import (
     BrokerVerification,
     Enquiry,
     VerificationStatus,
+    KycDocument,
 
 )
 from app.models import VerificationStatus
-
-
+from app.security.kyc_encryption import encrypt_kyc_document
+from app.models.kyc_document import KycDocument
+from app.security.kyc_encryption import decrypt_kyc_document
 from sqlalchemy import select
 
 from app.models import Property
@@ -34,7 +37,7 @@ from app.schemas.property import (
     PropertyUpdate,
 )
 
-from fastapi import Depends, FastAPI, HTTPException
+
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import create_access_token, hash_password, verify_password
@@ -379,6 +382,32 @@ def submit_broker_verification(
             status_code=status.HTTP_409_CONFLICT,
             detail="Broker is already verified.",
         )
+    required_document_types = {
+    "pan",
+    "aadhaar_front",
+    "aadhaar_back",
+    "selfie",
+}
+
+    uploaded_document_types = {
+      document.document_type
+      for document in db.query(KycDocument)
+      .filter(KycDocument.verification_id == verification.id)
+      .all()
+     }
+
+    missing_documents = required_document_types - uploaded_document_types
+
+    if missing_documents:
+      raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail={
+            "message": "All required KYC documents must be uploaded before submission.",
+            "missing_documents": sorted(missing_documents),
+        },
+    )
+
+
 
     verification.pan_number = verification_data.pan_number
     verification.business_name = verification_data.business_name
@@ -401,6 +430,125 @@ def submit_broker_verification(
         "status": verification.status,
         "submitted_at": verification.submitted_at,
     }
+
+ALLOWED_KYC_DOCUMENT_TYPES = {
+    "pan",
+    "aadhaar_front",
+    "aadhaar_back",
+    "selfie",
+}
+
+ALLOWED_KYC_CONTENT_TYPES = {
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
+MAX_KYC_DOCUMENT_SIZE = 8 * 1024 * 1024
+
+
+@app.post("/broker/verification/documents/{document_type}")
+async def upload_kyc_document(
+    document_type: str,
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "broker":
+        raise HTTPException(
+            status_code=403,
+            detail="Only brokers can upload KYC documents.",
+        )
+
+    if document_type not in ALLOWED_KYC_DOCUMENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid KYC document type.",
+        )
+
+    if file.content_type not in ALLOWED_KYC_CONTENT_TYPES:
+        raise HTTPException(
+            status_code=400,
+            detail="Only JPEG, PNG, and WebP images are allowed.",
+        )
+
+    broker_profile = (
+        db.query(BrokerProfile)
+        .filter(BrokerProfile.user_id == current_user.id)
+        .first()
+    )
+
+    if broker_profile is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Broker profile not found.",
+        )
+
+    verification = (
+        db.query(BrokerVerification)
+        .filter(
+            BrokerVerification.broker_id == broker_profile.id
+        )
+        .first()
+    )
+
+    if verification is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Broker verification not found.",
+        )
+
+    if verification.status in {"verified", "suspended"}:
+        raise HTTPException(
+            status_code=400,
+            detail="Documents cannot be changed for this verification status.",
+        )
+
+    data = await file.read()
+
+    if not data:
+        raise HTTPException(
+            status_code=400,
+            detail="Uploaded file is empty.",
+        )
+
+    if len(data) > MAX_KYC_DOCUMENT_SIZE:
+        raise HTTPException(
+            status_code=400,
+            detail="KYC document must be 8 MB or smaller.",
+        )
+
+    encrypted_data = encrypt_kyc_document(data)
+
+    existing_document = (
+        db.query(KycDocument)
+        .filter(
+            KycDocument.verification_id == verification.id,
+            KycDocument.document_type == document_type,
+        )
+        .first()
+    )
+
+    if existing_document:
+        existing_document.encrypted_data = encrypted_data
+        existing_document.content_type = file.content_type
+    else:
+        db.add(
+            KycDocument(
+                verification_id=verification.id,
+                document_type=document_type,
+                encrypted_data=encrypted_data,
+                content_type=file.content_type,
+            )
+        )
+
+    db.commit()
+
+    return {
+        "message": "KYC document uploaded successfully.",
+        "document_type": document_type,
+    }
+
 
 
 @app.post("/enquiries", response_model=EnquiryResponse, status_code=201)
@@ -672,6 +820,67 @@ def get_admin_verification_detail(
             else None
         ),
     }
+
+
+
+@app.get("/admin/verifications/{verification_id}/documents/{document_type}")
+def get_kyc_document(
+    verification_id: uuid.UUID,
+    document_type: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required.",
+        )
+
+    allowed_types = {
+        "pan",
+        "aadhaar_front",
+        "aadhaar_back",
+        "selfie",
+    }
+
+    if document_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid KYC document type.",
+        )
+
+    document = (
+        db.query(KycDocument)
+        .filter(
+            KycDocument.verification_id == verification_id,
+            KycDocument.document_type == document_type,
+        )
+        .first()
+    )
+
+    if document is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="KYC document not found.",
+        )
+
+    try:
+        decrypted_data = decrypt_kyc_document(document.encrypted_data)
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Unable to decrypt KYC document.",
+        )
+
+    return Response(
+        content=decrypted_data,
+        media_type=document.content_type,
+        headers={
+            "Cache-Control": "no-store",
+            "Pragma": "no-cache",
+        },
+    )
+
 
 @app.patch("/admin/verifications/{verification_id}/review")
 def review_admin_verification(
