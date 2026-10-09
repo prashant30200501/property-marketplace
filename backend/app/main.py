@@ -685,8 +685,15 @@ def get_broker_verification_status(
             detail="Broker verification record not found.",
         )
 
+   
     return {
         "status": verification.status,
+        "pan_number": verification.pan_number,
+        "business_name": verification.business_name,
+        "rera_registration_number": verification.rera_registration_number,
+        "firm_name": verification.firm_name,
+        "latitude": verification.latitude,
+        "longitude": verification.longitude,
         "rejection_reason": verification.rejection_reason,
         "submitted_at": (
             verification.submitted_at.isoformat()
@@ -703,6 +710,12 @@ def get_broker_verification_status(
             if verification.verified_at
             else None
         ),
+        "uploaded_documents": [
+            document.document_type
+            for document in db.query(KycDocument)
+            .filter(KycDocument.verification_id == verification.id)
+            .all()
+        ],
     }
 
 

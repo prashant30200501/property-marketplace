@@ -213,12 +213,33 @@ export async function createProperty(property: {
   return response.json();
 }
 
+
 export type BrokerVerificationStatus = {
-  status: "not_submitted" | "under_review" | "verified" | "rejected" | "suspended";
+  status:
+    | "not_submitted"
+    | "under_review"
+    | "verified"
+    | "rejected"
+    | "suspended";
+
+  pan_number: string | null;
+  business_name: string | null;
+  rera_registration_number: string | null;
+  firm_name: string | null;
+  latitude: string | null;
+  longitude: string | null;
+
   rejection_reason: string | null;
   submitted_at: string | null;
   reviewed_at: string | null;
   verified_at: string | null;
+
+  uploaded_documents: (
+    | "pan"
+    | "aadhaar_front"
+    | "aadhaar_back"
+    | "selfie"
+  )[];
 };
 
 export async function getBrokerVerificationStatus(): Promise<BrokerVerificationStatus> {

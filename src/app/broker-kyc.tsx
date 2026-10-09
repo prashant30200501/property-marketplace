@@ -49,11 +49,33 @@ export default function BrokerKycScreen() {
   const [uploadingDocument, setUploadingDocument] =
   useState<KycDocumentType | null>(null);
 
-  useEffect(() => {
+ 
+const [uploadedDocuments, setUploadedDocuments] = useState<KycDocumentType[]>([]);
+
+useEffect(() => {
   const loadVerificationStatus = async () => {
     try {
-      const status = await getBrokerVerificationStatus();
-      setVerificationStatus(status.status);
+      const saved = await getBrokerVerificationStatus();
+
+      setVerificationStatus(saved.status);
+      setPanNumber(saved.pan_number ?? "");
+      setBusinessName(saved.business_name ?? "");
+      setReraNumber(saved.rera_registration_number ?? "");
+      setFirmName(saved.firm_name ?? "");
+      setLatitude(
+        saved.latitude == null ? "" : String(saved.latitude)
+      );
+      setLongitude(
+        saved.longitude == null ? "" : String(saved.longitude)
+      );
+
+      
+setUploadedDocuments(
+  Array.isArray(saved.uploaded_documents)
+    ? saved.uploaded_documents
+    : []
+);
+
     } catch (err) {
       console.error("Unable to load KYC status:", err);
     }
@@ -61,6 +83,7 @@ export default function BrokerKycScreen() {
 
   loadVerificationStatus();
 }, []);
+
 
   const handleDocumentCapture = async (
   documentType: KycDocumentType,
@@ -144,12 +167,13 @@ export default function BrokerKycScreen() {
     "selfie",
   ];
 
-  const missingDocument = requiredDocuments.find(
-    (type) => !documents[type],
+  const missingDocument = requiredDocuments.filter(
+    (type) => !documents[type] && !uploadedDocuments.includes(type)
   );
 
-  if (missingDocument) {
-    return "Please capture all required KYC documents before submitting.";
+  if (missingDocument.length > 0) {
+    setError("Please upload all required identity documents and your selfie.");
+  return false;
   }
 
     return null;
@@ -401,6 +425,7 @@ supporting evidence during manual verification.
   documentType="pan"
   uri={documents.pan}
   uploading={uploadingDocument === "pan"}
+  alreadyUploaded={uploadedDocuments.includes("pan") ?? false}
   onPress={() => !isLocked && setActiveCamera("pan")}
 />
 
@@ -410,6 +435,7 @@ supporting evidence during manual verification.
   documentType="aadhaar_front"
   uri={documents.aadhaar_front}
   uploading={uploadingDocument === "aadhaar_front"}
+  alreadyUploaded={uploadedDocuments.includes("aadhaar_front") ?? false}
   onPress={() => !isLocked && setActiveCamera("aadhaar_front")}
 />
 
@@ -419,6 +445,7 @@ supporting evidence during manual verification.
   documentType="aadhaar_back"
   uri={documents.aadhaar_back}
   uploading={uploadingDocument === "aadhaar_back"}
+  alreadyUploaded={uploadedDocuments.includes("aadhaar_back") ?? false}
   onPress={() => !isLocked && setActiveCamera("aadhaar_back")}
 />
 
@@ -432,6 +459,7 @@ supporting evidence during manual verification.
   documentType="selfie"
   uri={documents.selfie}
   uploading={uploadingDocument === "selfie"}
+  alreadyUploaded={uploadedDocuments.includes("selfie") ?? false}
   onPress={() => !isLocked && setActiveCamera("selfie")}
 />
 
@@ -755,12 +783,14 @@ uploadingText: {
   fontSize: 12,
 },
 });
+
 function DocumentCard({
   title,
   description,
   documentType,
   uri,
   uploading,
+  alreadyUploaded,
   onPress,
 }: {
   title: string;
@@ -768,19 +798,28 @@ function DocumentCard({
   documentType: KycDocumentType;
   uri?: string;
   uploading: boolean;
+  alreadyUploaded: boolean;
   onPress: () => void;
 }) {
+  const isUploaded = Boolean(uri) || alreadyUploaded;
+
   return (
     <View style={styles.documentCard}>
       <View style={styles.documentInfo}>
         <Text style={styles.documentTitle}>
-          {uri ? "✓ " : ""}
+          {isUploaded ? "✓ " : ""}
           {title}
         </Text>
 
         <Text style={styles.documentDescription}>
           {description}
         </Text>
+
+        {alreadyUploaded && !uri && !uploading ? (
+          <Text style={styles.uploadingText}>
+            Uploaded securely
+          </Text>
+        ) : null}
 
         {uploading ? (
           <View style={styles.uploadingRow}>
@@ -795,7 +834,7 @@ function DocumentCard({
             onPress={onPress}
           >
             <Text style={styles.documentButtonText}>
-              {uri ? "Retake" : "Capture with camera"}
+              {uri ? "Retake" : alreadyUploaded ? "Replace document" : "Capture with camera"}
             </Text>
           </Pressable>
         )}
@@ -809,12 +848,10 @@ function DocumentCard({
       ) : (
         <View style={styles.emptyThumbnail}>
           <Text style={styles.emptyThumbnailText}>
-            📷
+            {alreadyUploaded ? "✓" : "📷"}
           </Text>
         </View>
       )}
     </View>
   );
 }
-
-
