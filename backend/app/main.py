@@ -736,8 +736,12 @@ def get_admin_verifications(
             BrokerProfile.user_id == User.id,
         )
         .filter(
-            BrokerVerification.status == VerificationStatus.UNDER_REVIEW.value
-        )
+    BrokerVerification.status.in_([
+        VerificationStatus.UNDER_REVIEW.value,
+        VerificationStatus.VERIFIED.value,
+        VerificationStatus.REJECTED.value,
+    ])
+)
         .order_by(BrokerVerification.submitted_at.asc())
         .all()
     )
