@@ -11,6 +11,7 @@
       "icon": "./assets/expo.icon"
     },
     "android": {
+      "package": "com.nestora.propertymarketplace",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
@@ -33,11 +34,18 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      "@react-native-google-signin/google-signin"
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "91bc1a59-ea18-4703-878c-d6bc70d13cce"
+      }
     }
   }
 }

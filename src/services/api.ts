@@ -58,6 +58,31 @@ export async function loginUser(email: string, password: string) {
   return data;
 }
 
+export async function loginWithGoogle(idToken: string) {
+  const response = await fetch(`${API_BASE_URL}/auth/google`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      id_token: idToken,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Google login failed: ${response.status} ${errorText}`
+    );
+  }
+
+  const data = await response.json();
+
+  await saveToken(data.access_token);
+
+  return data;
+}
+
 export async function getCurrentUser() {
   const token = await getToken();
 

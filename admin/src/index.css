@@ -109,3 +109,54 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+
+.documents-section {
+  margin-top: 24px;
+}
+
+.documents-section h3 {
+  margin-bottom: 16px;
+}
+
+.documents-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.document-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.document-card h4 {
+  margin: 0 0 12px;
+}
+
+.document-card a {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 8px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.kyc-document-image {
+  display: block;
+  width: 100%;
+  max-width: 420px;
+  height: 240px;
+  object-fit: contain;
+  background: #f3f4f6;
+  border-radius: 8px;
+}
+
+@media (max-width: 640px) {
+  .documents-grid {
+    grid-template-columns: 1fr;
+  }
+}

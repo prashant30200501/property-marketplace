@@ -6,6 +6,8 @@ from typing import List
 from app.models import User
 from app.schemas.user import UserCreate, UserResponse
 from fastapi.responses import Response
+from io import BytesIO
+from PIL import Image, UnidentifiedImageError
 
 from sqlalchemy.exc import IntegrityError
 import uuid
@@ -42,16 +44,22 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import create_access_token, hash_password, verify_password
 from app.dependencies import get_current_user, get_verified_broker,  get_admin_user
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse 
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 
 from datetime import datetime, timezone
 
 from app.schemas import (
-    BrokerVerificationSubmit, 
+    BrokerVerificationSubmit,
     BrokerVerificationReview,
     EnquiryCreate,
     EnquiryResponse,
     )
+
+from google.oauth2 import id_token
+from google.auth.transport import requests as google_requests
+
+from app.schemas.auth import GoogleLoginRequest
+from app.config import settings
 
 app = FastAPI(
     title="Nestora API",
@@ -94,17 +102,38 @@ def database_health(db: Session = Depends(get_db)):
     }
 @app.get("/properties", response_model=List[PropertyResponse])
 def get_properties(db: Session = Depends(get_db)):
-    statement = select(Property).order_by(Property.created_at.desc())
+    statement = (
+        select(Property)
+        .join(User, Property.created_by == User.id)
+        .join(BrokerProfile, BrokerProfile.user_id == User.id)
+        .join(
+            BrokerVerification,
+            BrokerVerification.broker_id == BrokerProfile.id,
+        )
+        .where(
+            User.role == "broker",
+            BrokerProfile.is_verified.is_(True),
+            BrokerProfile.is_active.is_(True),
+            BrokerVerification.status == "verified",
+            Property.status == "available",
+        )
+        .order_by(Property.created_at.desc())
+    )
 
     properties = db.scalars(statement).all()
-
     return properties
-
 @app.post("/users", response_model=UserResponse, status_code=201)
 def create_user(
     user_data: UserCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
 ):
+    if user_data.role not in ["customer", "broker"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Role must be customer or broker.",
+        )
+
     user = User(
         full_name=user_data.full_name,
         email=user_data.email,
@@ -127,18 +156,24 @@ def create_user(
 
     return user
 
-
 @app.get("/users/{user_id}", response_model=UserResponse)
 def get_user(
     user_id: uuid.UUID,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if current_user.role != "admin" and current_user.id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only access your own user profile.",
+        )
+
     user = db.get(User, user_id)
 
     if user is None:
         raise HTTPException(
             status_code=404,
-            detail="User not found",
+            detail="User not found.",
         )
 
     return user
@@ -195,7 +230,7 @@ def create_property(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_verified_broker),
 ):
-    
+
 
     property = Property(
         title=property_data.title,
@@ -321,6 +356,132 @@ def login(
         "role": user.role,
     }
 
+
+@app.post("/auth/google", response_model=TokenResponse)
+def google_login(
+    login_data: GoogleLoginRequest,
+    db: Session = Depends(get_db),
+):
+    # Google OAuth must be configured before this endpoint can be used.
+    if not settings.google_client_id:
+        raise HTTPException(
+            status_code=503,
+            detail="Google sign-in is not configured.",
+        )
+
+    # Verify the Google ID token on the backend.
+    try:
+       allowed_google_client_ids = [
+          client_id
+          for client_id in [
+             settings.google_client_id,
+            settings.google_android_client_id,
+            ]
+          if client_id
+]
+
+       if not allowed_google_client_ids:
+           raise HTTPException(
+              status_code=503,
+               detail="Google sign-in is not configured.",
+            )
+
+       google_user = id_token.verify_oauth2_token(
+    login_data.id_token,
+    google_requests.Request(),
+    audience=allowed_google_client_ids,
+)
+    except ValueError:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or expired Google ID token.",
+        )
+
+    # Only accept verified Google email addresses.
+    if google_user.get("email_verified") is not True:
+        raise HTTPException(
+            status_code=401,
+            detail="Your Google email must be verified.",
+        )
+
+    google_subject = google_user.get("sub")
+    email = google_user.get("email")
+
+    if not google_subject or not email:
+        raise HTTPException(
+            status_code=401,
+            detail="Google account information is incomplete.",
+        )
+
+    # First, look for an account already linked to this Google identity.
+    user = db.query(User).filter(
+        User.google_subject == google_subject
+    ).first()
+
+    if user:
+        if user.role != "customer":
+            raise HTTPException(
+                status_code=403,
+                detail="Google sign-in is only available for customers.",
+            )
+
+    else:
+        # Never silently link Google to an existing password account.
+        existing_user = db.query(User).filter(
+            User.email == email
+        ).first()
+
+        if existing_user:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "An account with this email already exists. "
+                    "Please sign in using your existing login method."
+                ),
+            )
+
+        # Create a new customer account.
+        full_name = (
+            google_user.get("name")
+            or email.split("@")[0]
+        )
+
+        user = User(
+            full_name=full_name[:150],
+            email=email,
+            google_subject=google_subject,
+            password_hash=None,
+            role="customer",
+        )
+
+        db.add(user)
+
+        try:
+            db.commit()
+            db.refresh(user)
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Unable to create the account. "
+                    "Please try signing in again."
+                ),
+            )
+
+    # Issue the same Nestora JWT used by password login.
+    access_token = create_access_token(
+        user_id=str(user.id),
+        role=user.role,
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": str(user.id),
+        "role": user.role,
+    }
+
 @app.get("/auth/me")
 def get_me(
     current_user: User = Depends(get_current_user),
@@ -333,7 +494,7 @@ def get_me(
         "phone": current_user.phone,
         "phone_verified": current_user.phone_verified,
         "pincode": current_user.pincode,
-    } 
+    }
 
 @app.post("/broker/verification/submit")
 def submit_broker_verification(
@@ -382,30 +543,32 @@ def submit_broker_verification(
             status_code=status.HTTP_409_CONFLICT,
             detail="Broker is already verified.",
         )
-    required_document_types = {
-    "pan",
-    "aadhaar_front",
-    "aadhaar_back",
-    "selfie",
-}
+        required_document_types = {
+        "pan",
+        "aadhaar_front",
+        "aadhaar_back",
+        "selfie",
+    }
 
     uploaded_document_types = {
-      document.document_type
-      for document in db.query(KycDocument)
-      .filter(KycDocument.verification_id == verification.id)
-      .all()
-     }
+        document.document_type
+        for document in (
+            db.query(KycDocument)
+            .filter(KycDocument.verification_id == verification.id)
+            .all()
+        )
+    }
 
     missing_documents = required_document_types - uploaded_document_types
 
     if missing_documents:
-      raise HTTPException(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        detail={
-            "message": "All required KYC documents must be uploaded before submission.",
-            "missing_documents": sorted(missing_documents),
-        },
-    )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": "All required KYC documents must be uploaded before submission.",
+                "missing_documents": sorted(missing_documents),
+            },
+        )
 
 
 
@@ -518,6 +681,26 @@ async def upload_kyc_document(
             detail="KYC document must be 8 MB or smaller.",
         )
 
+    try:
+        with Image.open(BytesIO(data)) as image:
+            image.verify()
+
+        with Image.open(BytesIO(data)) as image:
+            actual_content_type = {
+                "JPEG": "image/jpeg",
+                "PNG": "image/png",
+                "WEBP": "image/webp",
+            }.get(image.format)
+
+    except (UnidentifiedImageError, OSError, ValueError):
+        actual_content_type = None
+
+    if actual_content_type is None or actual_content_type != file.content_type:
+        raise HTTPException(
+            status_code=400,
+            detail="File content must match a valid JPEG, PNG, or WebP image.",
+        )
+
     encrypted_data = encrypt_kyc_document(data)
 
     existing_document = (
@@ -576,6 +759,45 @@ def create_enquiry(
             status_code=400,
             detail="This property is not currently available.",
         )
+
+    broker_profile = (
+        db.query(BrokerProfile)
+        .filter(BrokerProfile.user_id == property.created_by)
+        .first()
+    )
+
+    if (
+        broker_profile is None
+        or not broker_profile.is_active
+        or not broker_profile.is_verified
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This property's broker is not currently eligible "
+                "to receive enquiries."
+            ),
+        )
+
+    verification = (
+        db.query(BrokerVerification)
+        .filter(BrokerVerification.broker_id == broker_profile.id)
+        .first()
+    )
+
+    if verification is None or verification.status != "verified":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "This property's broker is not currently eligible "
+                "to receive enquiries."
+            ),
+        )
+
+
+
+
+
 
     enquiry = Enquiry(
         customer_id=current_user.id,
@@ -685,7 +907,7 @@ def get_broker_verification_status(
             detail="Broker verification record not found.",
         )
 
-   
+
     return {
         "status": verification.status,
         "pan_number": verification.pan_number,

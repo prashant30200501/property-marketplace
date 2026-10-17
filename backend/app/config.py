@@ -10,6 +10,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 60
     kyc_encryption_key: str
+    google_client_id: str = ""
+    google_android_client_id: str = ""
+    
 
     model_config = SettingsConfigDict(
         env_file=".env",

@@ -32,6 +32,13 @@ class User(Base):
         nullable=False,
     )
 
+    google_subject: Mapped[Optional[str]] = mapped_column(
+    String(255),
+    unique=True,
+    index=True,
+    nullable=True,
+)
+
     phone: Mapped[Optional[str]] = mapped_column(
         String(20),
         unique=True,

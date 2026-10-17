@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import decode_access_token
 from app.database import get_db
-from app.models import User
+
 from app.models import User, BrokerProfile, BrokerVerification
 
 

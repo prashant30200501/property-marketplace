@@ -1,15 +1,23 @@
+
 import {
   getAdminToken,
   getAdminVerificationDetail,
+  getAdminVerificationDocument,
   getAdminVerifications,
   loginAdmin,
   logoutAdmin,
-  reviewAdminVerification
+  reviewAdminVerification,
 } from "./api";
+
+
 
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
-import type { BrokerVerification, BrokerVerificationDetail, } from "./api";
+import type {
+  BrokerVerification,
+  BrokerVerificationDetail,
+  KycDocumentType,
+} from "./api";
 import "./App.css";
 
 
@@ -82,6 +90,9 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<"dashboard" | "kyc">("dashboard");
+  const [kycFilter, setKycFilter] = useState<
+  "under_review" | "verified" | "rejected"
+>("under_review");
   const [verifications, setVerifications] = useState<BrokerVerification[]>(
   [],
 );
@@ -92,6 +103,88 @@ const [detailLoading, setDetailLoading] = useState(false);
 const [error, setError] = useState("");
 const [reviewLoading, setReviewLoading] = useState(false);
 const [reviewError, setReviewError] = useState("");
+
+const [documentUrls, setDocumentUrls] = useState<
+  Partial<Record<KycDocumentType, string>>
+>({});
+const [documentsLoading, setDocumentsLoading] = useState(false);
+const [documentLoadError, setDocumentLoadError] = useState("");
+
+
+useEffect(() => {
+  const verificationId = selectedVerification?.verification_id;
+
+  if (!verificationId) {
+    setDocumentUrls({});
+    setDocumentLoadError("");
+    return;
+  }
+  const validVerificationId: string = verificationId;
+
+  let cancelled = false;
+  const createdUrls: string[] = [];
+
+  setDocumentUrls({});
+  setDocumentLoadError("");
+  setDocumentsLoading(true);
+
+  const documentTypes: KycDocumentType[] = [
+    "pan",
+    "aadhaar_front",
+    "aadhaar_back",
+    "selfie",
+  ];
+
+  async function loadDocuments() {
+    const results = await Promise.all(
+      documentTypes.map(async (type) => {
+        try {
+          const blob = await getAdminVerificationDocument(
+            validVerificationId,
+            type,
+          );
+
+          const url = URL.createObjectURL(blob);
+          createdUrls.push(url);
+
+          return [type, url] as const;
+        } catch {
+          return [type, null] as const;
+        }
+      }),
+    );
+
+    if (cancelled) {
+      createdUrls.forEach((url) => URL.revokeObjectURL(url));
+      return;
+    }
+
+    const urls: Partial<Record<KycDocumentType, string>> = {};
+
+    results.forEach(([type, url]) => {
+      if (url) {
+        urls[type] = url;
+      }
+    });
+
+    setDocumentUrls(urls);
+
+    if (results.some(([, url]) => !url)) {
+      setDocumentLoadError(
+        "Some documents could not be loaded. Check that they were uploaded and try again.",
+      );
+    }
+
+    setDocumentsLoading(false);
+  }
+
+  void loadDocuments();
+
+  return () => {
+    cancelled = true;
+    createdUrls.forEach((url) => URL.revokeObjectURL(url));
+  };
+}, [selectedVerification?.verification_id]);
 
   async function loadVerifications() {
     setLoading(true);
@@ -150,6 +243,63 @@ const [reviewError, setReviewError] = useState("");
     setReviewLoading(false);
   }
 }
+
+
+async function rejectVerification() {
+  if (!selectedVerification) {
+    return;
+  }
+
+  const rejectionReason = window.prompt(
+    `Why are you rejecting ${selectedVerification.full_name}'s verification?`,
+  );
+
+  if (rejectionReason === null) {
+    return;
+  }
+
+  if (!rejectionReason.trim()) {
+    setReviewError("Please provide a rejection reason.");
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Reject ${selectedVerification.full_name}'s verification?`,
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  setReviewLoading(true);
+  setReviewError("");
+
+  try {
+    await reviewAdminVerification(
+      selectedVerification.verification_id,
+      "rejected",
+      rejectionReason.trim(),
+    );
+
+    setSelectedVerification({
+      ...selectedVerification,
+      status: "rejected",
+      rejection_reason: rejectionReason.trim(),
+      reviewed_at: new Date().toISOString(),
+    });
+
+    await loadVerifications();
+  } catch (err) {
+    setReviewError(
+      err instanceof Error
+        ? err.message
+        : "Unable to reject verification.",
+    );
+  } finally {
+    setReviewLoading(false);
+  }
+}
+
 
   async function openVerification(verificationId: string) {
   setDetailLoading(true);
@@ -275,6 +425,28 @@ const [reviewError, setReviewError] = useState("");
           </>
         ) : (
           <section className="panel">
+            <div className="kyc-filter-tabs">
+  <button
+    className={kycFilter === "under_review" ? "active" : ""}
+    onClick={() => setKycFilter("under_review")}
+  >
+    Pending
+  </button>
+
+  <button
+    className={kycFilter === "verified" ? "active" : ""}
+    onClick={() => setKycFilter("verified")}
+  >
+    Verified
+  </button>
+
+  <button
+    className={kycFilter === "rejected" ? "active" : ""}
+    onClick={() => setKycFilter("rejected")}
+  >
+    Rejected
+  </button>
+</div>
             {selectedVerification && (
   <div className="verification-detail">
     <button
@@ -355,10 +527,58 @@ const [reviewError, setReviewError] = useState("");
           </strong>
         </div>
 
+
+<div className="documents-section">
+  <h3>Submitted KYC Documents</h3>
+
+  {documentsLoading && <p>Loading documents...</p>}
+
+  {documentLoadError && (
+    <div className="login-error">{documentLoadError}</div>
+  )}
+
+  <div className="documents-grid">
+    {(
+      [
+        ["pan", "PAN Card"],
+        ["aadhaar_front", "Aadhaar Front"],
+        ["aadhaar_back", "Aadhaar Back"],
+        ["selfie", "Live Selfie"],
+      ] as const
+    ).map(([type, label]) => (
+      <div className="document-card" key={type}>
+        <h4>{label}</h4>
+
+        {documentUrls[type] ? (
+          <a
+            href={documentUrls[type]}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <img
+              src={documentUrls[type]}
+              alt={label}
+              className="kyc-document-image"
+            />
+            <span>Open full image</span>
+          </a>
+        ) : (
+          !documentsLoading && <p>Document unavailable</p>
+        )}
+      </div>
+    ))}
+  </div>
+</div>
+
+
         <div className="review-actions">
-          <button className="reject-button">
-            Reject
-          </button>
+         <button
+  className="reject-button"
+  onClick={rejectVerification}
+  disabled={reviewLoading || selectedVerification.status === "rejected"}
+>
+  {reviewLoading ? "Processing..." : "Reject"}
+</button>
           {reviewError && (
   <div className="login-error">
     {reviewError}
@@ -381,16 +601,36 @@ const [reviewError, setReviewError] = useState("");
 
             {error && <div className="login-error">{error}</div>}
 
-            {!loading && !error && verifications.length === 0 && (
-              <div className="empty-state">
-                <strong>No brokers awaiting review</strong>
-                <p>There are currently no KYC submissions to review.</p>
-              </div>
-            )}
+            ```tsx
+{!loading &&
+  !error &&
+  verifications.filter((verification) => verification.status === kycFilter)
+    .length === 0 && (
+    <div className="empty-state">
+      <strong>
+        {kycFilter === "under_review"
+          ? "No pending verifications"
+          : kycFilter === "verified"
+            ? "No verified brokers"
+            : "No rejected applications"}
+      </strong>
+
+      <p>
+        {kycFilter === "under_review"
+          ? "There are currently no KYC submissions awaiting review."
+          : kycFilter === "verified"
+            ? "No brokers have been verified yet."
+            : "No KYC applications have been rejected yet."}
+      </p>
+    </div>
+  )}
+```
 
             {!loading &&
               !error &&
-              verifications.map((verification) => (
+              verifications
+  .filter((verification) => verification.status === kycFilter)
+  .map((verification) => (
   <div
     key={verification.verification_id}
     className="kyc-row"

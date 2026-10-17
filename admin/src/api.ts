@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://127.0.0.1:8000";
+const API_BASE_URL = "https://nestora-api-3xpy.onrender.com";
 
 const TOKEN_KEY = "nestora_admin_token";
 
@@ -61,7 +61,7 @@ export type BrokerVerification = {
   full_name: string;
   email: string;
   business_name: string | null;
-  status: string;
+  status: "under_review" | "verified" | "rejected";
   submitted_at: string | null;
 };
 
@@ -185,4 +185,46 @@ export async function reviewAdminVerification(
   }
 
   return data;
+}
+
+
+export type KycDocumentType =
+  | "pan"
+  | "aadhaar_front"
+  | "aadhaar_back"
+  | "selfie";
+
+export async function getAdminVerificationDocument(
+  verificationId: string,
+  documentType: KycDocumentType,
+): Promise<Blob> {
+  const token = getAdminToken();
+
+  if (!token) {
+    throw new Error("Admin session expired. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/verifications/${verificationId}/documents/${documentType}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      cache: "no-store",
+    },
+  );
+
+  if (!response.ok) {
+    if (response.status === 404) {
+      throw new Error(`${documentType} document was not found.`);
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new Error("Admin access denied. Please sign in again.");
+    }
+
+    throw new Error(`Unable to load ${documentType} document.`);
+  }
+
+  return response.blob();
 }

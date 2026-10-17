@@ -1,6 +1,9 @@
 
+
+import { GoogleSignin, statusCodes } from "@react-native-google-signin/google-signin";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+
+import { useEffect, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -14,8 +17,7 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { loginUser } from "../../services/api";
-
+import { loginUser, loginWithGoogle } from "../../services/api";
 const COLORS = {
   navy: "#0D1B2A",
   navyLight: "#172A40",
@@ -45,6 +47,68 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
 
   const router = useRouter();
+
+  const [googleLoading, setGoogleLoading] = useState(false);
+
+
+  useEffect(() => {
+  GoogleSignin.configure({
+    webClientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
+    scopes: ["profile", "email"],
+  });
+}, []);
+
+ const handleGoogleLogin = async () => {
+  if (role !== "Customer") {
+    Alert.alert(
+      "Customer sign-in only",
+      "Google sign-in is available for customers. Brokers should use email and password."
+    );
+    return;
+  }
+
+  try {
+    setGoogleLoading(true);
+
+    await GoogleSignin.hasPlayServices({
+      showPlayServicesUpdateDialog: true,
+    });
+
+    await GoogleSignin.signIn();
+
+    const tokens = await GoogleSignin.getTokens();
+    const idToken = tokens.idToken;
+
+    if (!idToken) {
+      throw new Error("Google did not return an ID token.");
+    }
+
+    const data = await loginWithGoogle(idToken);
+
+    if (data.role !== "customer") {
+      Alert.alert(
+        "Sign-in unavailable",
+        "Google sign-in is only available for customer accounts."
+      );
+      return;
+    }
+
+    router.replace("/customer-home");
+  } catch (error: any) {
+    console.error("Google sign-in failed:", error);
+
+    if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+      return;
+    }
+
+    Alert.alert(
+      "Google sign-in failed",
+      error.message ?? "Please try again."
+    );
+  } finally {
+    setGoogleLoading(false);
+  }
+};
 
   // Automatically identify phone number vs email
   const isEmail = identifier.trim().includes("@");
@@ -341,19 +405,19 @@ export default function LoginScreen() {
 
 {/* Google sign-in */}
 <Pressable
- onPress={() =>
-  router.push({
-    pathname: "/profile-setup",
-    params: { role },
-  })
-}
+  onPress={handleGoogleLogin}
+  disabled={role !== "Customer" || googleLoading}
   style={({ pressed }) => [
     styles.googleButton,
     pressed && styles.buttonPressed,
+    (role !== "Customer" || googleLoading) && { opacity: 0.5 },
   ]}
+
 >
   <Text style={styles.googleG}>G</Text>
-  <Text style={styles.googleButtonText}>Continue with Google</Text>
+ <Text style={styles.googleButtonText}>
+  {googleLoading ? "Signing in..." : "Continue with Google"}
+</Text>
 </Pressable>
             <View style={styles.dividerRow}>
               <View style={styles.divider} />

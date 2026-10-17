@@ -32,3 +32,6 @@ watchfiles==1.1.1
 websockets==15.0.1
 cryptography
 python-multipart
+Pillow==11.3.0
+google-auth==2.40.3
+requests
