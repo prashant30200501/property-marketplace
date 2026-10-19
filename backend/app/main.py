@@ -543,7 +543,7 @@ def submit_broker_verification(
             status_code=status.HTTP_409_CONFLICT,
             detail="Broker is already verified.",
         )
-        required_document_types = {
+    required_document_types = {
         "pan",
         "aadhaar_front",
         "aadhaar_back",
