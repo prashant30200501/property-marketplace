@@ -827,6 +827,58 @@ def get_admin_enquiries(
 
     return enquiries
 
+
+@app.patch("/admin/enquiries/{enquiry_id}/assign", response_model=EnquiryResponse)
+def assign_enquiry_broker(
+    enquiry_id: uuid.UUID,
+    broker_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    # Find the enquiry
+    enquiry = db.query(Enquiry).filter(
+        Enquiry.id == enquiry_id
+    ).first()
+
+    if not enquiry:
+        raise HTTPException(
+            status_code=404,
+            detail="Enquiry not found",
+        )
+
+    # Find the selected broker
+    broker = db.query(User).filter(
+        User.id == broker_id
+    ).first()
+
+    if not broker:
+        raise HTTPException(
+            status_code=404,
+            detail="Broker not found",
+        )
+
+    # Only verified brokers can be assigned
+    if broker.role != "broker":
+        raise HTTPException(
+            status_code=400,
+            detail="Selected user is not a broker",
+        )
+
+    if broker.verification_status != "verified":
+        raise HTTPException(
+            status_code=400,
+            detail="Broker is not verified",
+        )
+
+    # Save assignment
+    enquiry.assigned_broker_id = broker.id
+    enquiry.status = "assigned"
+
+    db.commit()
+    db.refresh(enquiry)
+
+    return enquiry
+
 @app.get("/enquiries/my", response_model=list[EnquiryResponse])
 def get_my_enquiries(
     db: Session = Depends(get_db),
