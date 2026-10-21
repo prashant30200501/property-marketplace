@@ -800,18 +800,32 @@ def create_enquiry(
 
 
     enquiry = Enquiry(
-        customer_id=current_user.id,
-        property_id=property.id,
-        assigned_broker_id=property.created_by,
-        status="new",
-        customer_message=enquiry_data.customer_message,
-    )
+    customer_id=current_user.id,
+    property_id=property.id,
+    assigned_broker_id=None,
+    status="new",
+    customer_message=enquiry_data.customer_message,
+)
 
     db.add(enquiry)
     db.commit()
     db.refresh(enquiry)
 
     return enquiry
+
+
+@app.get("/admin/enquiries", response_model=list[EnquiryResponse])
+def get_admin_enquiries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    enquiries = (
+        db.query(Enquiry)
+        .order_by(Enquiry.created_at.desc())
+        .all()
+    )
+
+    return enquiries
 
 @app.get("/enquiries/my", response_model=list[EnquiryResponse])
 def get_my_enquiries(
