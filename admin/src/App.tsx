@@ -10,6 +10,16 @@ import {
 } from "./api";
 
 
+import {
+  assignAdminEnquiryBroker,
+  getAdminEnquiries,
+  getBrokerRecommendations,
+  type AdminEnquiry,
+  type BrokerRecommendation,
+  type BrokerRecommendationsResponse,
+} from "./api";
+
+
 
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
@@ -88,8 +98,287 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
   );
 }
 
+
+
+
+function EnquiriesPanel() {
+  const [enquiries, setEnquiries] = useState<AdminEnquiry[]>([]);
+  const [brokers, setBrokers] = useState<BrokerVerification[]>([]);
+  const [recommendations, setRecommendations] = useState<
+    Record<string, BrokerRecommendationsResponse>
+  >({});
+  const [recommendationLoading, setRecommendationLoading] = useState<
+    Record<string, boolean>
+  >({});
+  const [recommendationErrors, setRecommendationErrors] = useState<
+    Record<string, string>
+  >({});
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  async function loadEnquiries() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const [enquiryData, brokerData] = await Promise.all([
+        getAdminEnquiries(),
+        getAdminVerifications(),
+      ]);
+
+      setEnquiries(enquiryData);
+      setBrokers(
+        brokerData.filter((broker) => broker.status === "verified"),
+      );
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to load enquiries.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadEnquiries();
+  }, []);
+
+  async function loadRecommendations(enquiryId: string) {
+    setRecommendationLoading((current) => ({
+      ...current,
+      [enquiryId]: true,
+    }));
+    setRecommendationErrors((current) => ({
+      ...current,
+      [enquiryId]: "",
+    }));
+
+    try {
+      const result = await getBrokerRecommendations(enquiryId);
+      setRecommendations((current) => ({
+        ...current,
+        [enquiryId]: result,
+      }));
+    } catch (err) {
+      setRecommendationErrors((current) => ({
+        ...current,
+        [enquiryId]:
+          err instanceof Error
+            ? err.message
+            : "Unable to load broker recommendations.",
+      }));
+    } finally {
+      setRecommendationLoading((current) => ({
+        ...current,
+        [enquiryId]: false,
+      }));
+    }
+  }
+
+  async function assign(
+    enquiry: AdminEnquiry,
+    broker: Pick<BrokerRecommendation, "user_id" | "full_name" | "email">,
+  ) {
+    if (
+      !window.confirm(
+        `Assign this enquiry to ${broker.full_name || broker.email}?`,
+      )
+    ) {
+      return;
+    }
+
+    setBusyId(enquiry.id);
+    setError("");
+
+    try {
+      await assignAdminEnquiryBroker(enquiry.id, broker.user_id);
+      setRecommendations((current) => {
+        const next = { ...current };
+        delete next[enquiry.id];
+        return next;
+      });
+      await loadEnquiries();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to assign broker.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  return (
+    <section className="panel">
+      <div className="panel-header">
+        <div>
+          <h2>Incoming enquiries</h2>
+          <p>
+            Review customer requests and see verified broker recommendations.
+          </p>
+        </div>
+        <button
+          className="primary-button"
+          onClick={() => void loadEnquiries()}
+        >
+          Refresh
+        </button>
+      </div>
+
+      {loading && <p>Loading enquiries...</p>}
+      {error && <div className="login-error">{error}</div>}
+
+      {!loading && !error && enquiries.length === 0 && (
+        <div className="empty-state">
+          <strong>No enquiries yet</strong>
+          <p>New customer enquiries will appear here.</p>
+        </div>
+      )}
+
+      {!loading &&
+        enquiries.map((enquiry) => {
+          const result = recommendations[enquiry.id];
+          const isRecommendationLoading =
+            recommendationLoading[enquiry.id] ?? false;
+          const recommendationError =
+            recommendationErrors[enquiry.id] || "";
+
+          return (
+            <div className="kyc-row" key={enquiry.id}>
+              <div>
+                <strong>Property enquiry</strong>
+                <p>Status: {enquiry.status}</p>
+                <p>Customer ID: {enquiry.customer_id}</p>
+                <p>Property ID: {enquiry.property_id}</p>
+                <p>
+                  {enquiry.customer_message || "No message provided."}
+                </p>
+
+                {enquiry.assigned_broker_id ? (
+                  <p>
+                    Assigned broker ID: {enquiry.assigned_broker_id}
+                  </p>
+                ) : (
+                  <>
+                    <strong>Broker recommendations</strong>
+
+                    {!result && (
+                      <div>
+                        <button
+                          className="primary-button"
+                          disabled={isRecommendationLoading}
+                          onClick={() =>
+                            void loadRecommendations(enquiry.id)
+                          }
+                          style={{ marginTop: 8 }}
+                        >
+                          {isRecommendationLoading
+                            ? "Finding brokers..."
+                            : "Find recommended brokers"}
+                        </button>
+                      </div>
+                    )}
+
+                    {recommendationError && (
+                      <div className="login-error">
+                        {recommendationError}
+                        <button
+                          className="primary-button"
+                          onClick={() =>
+                            void loadRecommendations(enquiry.id)
+                          }
+                          style={{ marginLeft: 8 }}
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    )}
+
+                    {result && (
+                      <>
+                        <p>
+                          Property pincode:{" "}
+                          {result.property_pincode || "Not provided"}
+                        </p>
+                        <p>
+                          Matching uses registered pincodes, not confirmed
+                          service areas.
+                        </p>
+
+                        {result.recommendations.length === 0 ? (
+                          <p>
+                            No eligible verified brokers are available.
+                          </p>
+                        ) : (
+                          result.recommendations.map((broker) => (
+                            <div
+                              key={broker.user_id}
+                              className="detail-card"
+                              style={{ marginTop: 10 }}
+                            >
+                              <strong>
+                                {broker.full_name || broker.email}
+                              </strong>
+                              <p>{broker.business_name || "Business name not provided"}</p>
+                              <p>{broker.email}</p>
+                              <p>
+                                Registered pincode:{" "}
+                                {broker.registered_pincode || "Not provided"}
+                              </p>
+                              <p>
+                                {broker.pincode_match
+                                  ? "✓ Registered pincode match"
+                                  : "No exact registered pincode match"}
+                              </p>
+                              <button
+                                className="primary-button"
+                                disabled={busyId === enquiry.id}
+                                onClick={() => void assign(enquiry, broker)}
+                                style={{ marginTop: 8 }}
+                              >
+                                {busyId === enquiry.id
+                                  ? "Assigning..."
+                                  : `Assign to ${broker.full_name || broker.email}`}
+                              </button>
+                            </div>
+                          ))
+                        )}
+
+                        <button
+                          className="primary-button"
+                          disabled={isRecommendationLoading}
+                          onClick={() =>
+                            void loadRecommendations(enquiry.id)
+                          }
+                          style={{ marginTop: 10 }}
+                        >
+                          Refresh recommendations
+                        </button>
+                      </>
+                    )}
+
+                    {!result && brokers.length === 0 && !isRecommendationLoading && (
+                      <p>
+                        The existing KYC list contains no verified brokers.
+                        Use Find recommended brokers to check eligibility.
+                      </p>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+    </section>
+  );
+}
+
+
+
 function Dashboard({ onLogout }: { onLogout: () => void }) {
-  const [page, setPage] = useState<"dashboard" | "kyc">("dashboard");
+  const [page, setPage] = useState<
+  "dashboard" | "kyc" | "enquiries"
+>("dashboard");
   const [kycFilter, setKycFilter] = useState<
   "under_review" | "verified" | "rejected"
 >("under_review");
@@ -347,14 +636,25 @@ async function rejectVerification() {
 
           <button className="nav-item">Brokers</button>
           <button className="nav-item">Properties</button>
-          <button className="nav-item">Enquiries</button>
+          <button
+  className={`nav-item ${page === "enquiries" ? "active" : ""}`}
+  onClick={() => setPage("enquiries")}
+>
+  Enquiries
+</button>
         </nav>
       </aside>
 
       <main className="main-content">
         <header className="topbar">
           <div>
-            <h1>{page === "kyc" ? "KYC Review" : "Dashboard"}</h1>
+            <h1>
+  {page === "kyc"
+    ? "KYC Review"
+    : page === "enquiries"
+      ? "Enquiries"
+      : "Dashboard"}
+</h1>
 
             <p>
               {page === "kyc"
@@ -423,7 +723,7 @@ async function rejectVerification() {
               </div>
             </section>
           </>
-        ) : (
+        ) : page === "kyc" ? (
           <section className="panel">
             <div className="kyc-filter-tabs">
   <button
@@ -661,6 +961,8 @@ async function rejectVerification() {
                 </div>
               ))}
           </section>
+          ) : (
+  <EnquiriesPanel />
         )}
       </main>
     </div>

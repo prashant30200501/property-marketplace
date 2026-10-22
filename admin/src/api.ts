@@ -228,3 +228,120 @@ export async function getAdminVerificationDocument(
 
   return response.blob();
 }
+
+
+
+export type AdminEnquiry = {
+  id: string;
+  customer_id: string;
+  property_id: string;
+  assigned_broker_id: string | null;
+  status: string;
+  customer_message: string | null;
+};
+
+export async function getAdminEnquiries(): Promise<AdminEnquiry[]> {
+  const token = getAdminToken();
+
+  if (!token) {
+    throw new Error("Admin session expired. Please sign in again.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/admin/enquiries`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Unable to load enquiries."
+    );
+  }
+
+  return data;
+}
+
+export async function assignAdminEnquiryBroker(
+  enquiryId: string,
+  brokerUserId: string
+) {
+  const token = getAdminToken();
+
+  if (!token) {
+    throw new Error("Admin session expired. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/enquiries/${enquiryId}/assign?broker_id=${encodeURIComponent(brokerUserId)}`,
+    {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Unable to assign broker."
+    );
+  }
+
+  return data as AdminEnquiry;
+}
+
+
+
+export type BrokerRecommendation = {
+  user_id: string;
+  full_name: string | null;
+  email: string;
+  business_name: string | null;
+  registered_pincode: string | null;
+  pincode_match: boolean;
+  match_reason: string;
+};
+
+export type BrokerRecommendationsResponse = {
+  enquiry_id: string;
+  property_id: string;
+  property_pincode: string | null;
+  matching_basis: "registered_pincode";
+  recommendations: BrokerRecommendation[];
+};
+
+export async function getBrokerRecommendations(
+  enquiryId: string,
+): Promise<BrokerRecommendationsResponse> {
+  const token = getAdminToken();
+
+  if (!token) {
+    throw new Error("Admin session expired. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/enquiries/${encodeURIComponent(enquiryId)}/broker-recommendations`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Unable to load broker recommendations.",
+    );
+  }
+
+  return data as BrokerRecommendationsResponse;
+}

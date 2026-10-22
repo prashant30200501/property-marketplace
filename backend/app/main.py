@@ -827,6 +827,91 @@ def get_admin_enquiries(
 
     return enquiries
 
+@app.get("/admin/enquiries/{enquiry_id}/broker-recommendations")
+def get_broker_recommendations(
+    enquiry_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    enquiry = db.get(Enquiry, enquiry_id)
+
+    if enquiry is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Enquiry not found.",
+        )
+
+    property_data = db.get(Property, enquiry.property_id)
+
+    if property_data is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Property not found.",
+        )
+
+    property_pincode = (property_data.pincode or "").strip()
+
+    eligible_brokers = (
+        db.query(User, BrokerProfile, BrokerVerification)
+        .join(
+            BrokerProfile,
+            BrokerProfile.user_id == User.id,
+        )
+        .join(
+            BrokerVerification,
+            BrokerVerification.broker_id == BrokerProfile.id,
+        )
+        .filter(
+            User.role == "broker",
+            BrokerProfile.is_active.is_(True),
+            BrokerProfile.is_verified.is_(True),
+            BrokerVerification.status == VerificationStatus.VERIFIED.value,
+        )
+        .all()
+    )
+
+    recommendations = []
+
+    for user, profile, verification in eligible_brokers:
+        broker_pincode = (user.pincode or "").strip()
+        pincode_match = bool(
+            property_pincode
+            and broker_pincode
+            and property_pincode == broker_pincode
+        )
+
+        recommendations.append(
+            {
+                "user_id": str(user.id),
+                "full_name": user.full_name,
+                "email": user.email,
+                "business_name": verification.business_name
+                or profile.business_name,
+                "registered_pincode": broker_pincode or None,
+                "pincode_match": pincode_match,
+                "match_reason": (
+                    "Registered pincode match"
+                    if pincode_match
+                    else "No exact registered pincode match"
+                ),
+            }
+        )
+
+    recommendations.sort(
+        key=lambda broker: (
+            not broker["pincode_match"],
+            (broker["full_name"] or "").lower(),
+        )
+    )
+
+    return {
+        "enquiry_id": str(enquiry.id),
+        "property_id": str(property_data.id),
+        "property_pincode": property_pincode or None,
+        "matching_basis": "registered_pincode",
+        "recommendations": recommendations,
+    }
+
 
 @app.patch("/admin/enquiries/{enquiry_id}/assign", response_model=EnquiryResponse)
 def assign_enquiry_broker(
