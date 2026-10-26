@@ -101,6 +101,7 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
 
 
+
 function EnquiriesPanel() {
   const [enquiries, setEnquiries] = useState<AdminEnquiry[]>([]);
   const [brokers, setBrokers] = useState<BrokerVerification[]>([]);
@@ -116,6 +117,8 @@ function EnquiriesPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
 
   async function loadEnquiries() {
     setLoading(true);
@@ -208,73 +211,265 @@ function EnquiriesPanel() {
     }
   }
 
+  const unassignedCount = enquiries.filter(
+    (item) => !item.assigned_broker_id,
+  ).length;
+
+  const assignedCount = enquiries.filter(
+    (item) => Boolean(item.assigned_broker_id),
+  ).length;
+
+  const closedCount = enquiries.filter(
+    (item) => item.status.toLowerCase() === "closed",
+  ).length;
+
+  const normalizedSearch = search.trim().toLowerCase();
+
+  const filteredEnquiries = enquiries.filter((item) => {
+    const matchesSearch = [
+  item.id,
+  item.customer_name || "",
+  item.customer_email || "",
+  item.customer_phone || "",
+  item.property_title || "",
+  item.property_type || "",
+  item.property_address || "",
+  item.property_pincode || "",
+  item.customer_message || "",
+  item.status,
+  item.assigned_broker_name || "",
+  item.assigned_broker_business_name || "",
+].some((value) => value.toLowerCase().includes(normalizedSearch));
+
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "unassigned" && !item.assigned_broker_id) ||
+      (statusFilter === "assigned" && Boolean(item.assigned_broker_id)) ||
+      (statusFilter === "closed" &&
+        item.status.toLowerCase() === "closed");
+
+    return matchesSearch && matchesStatus;
+  });
+
   return (
-    <section className="panel">
-      <div className="panel-header">
+    <section className="enquiries-page">
+      <div className="enquiries-heading">
         <div>
-          <h2>Incoming enquiries</h2>
+          <span className="eyebrow">MARKETPLACE OPERATIONS</span>
+          <h2>Enquiry management</h2>
           <p>
-            Review customer requests and see verified broker recommendations.
+            Track customer requests and connect them with eligible,
+            verified brokers.
           </p>
         </div>
         <button
           className="primary-button"
           onClick={() => void loadEnquiries()}
+          disabled={loading}
         >
-          Refresh
+          {loading ? "Refreshing..." : "↻ Refresh"}
         </button>
       </div>
 
-      {loading && <p>Loading enquiries...</p>}
       {error && <div className="login-error">{error}</div>}
 
-      {!loading && !error && enquiries.length === 0 && (
-        <div className="empty-state">
-          <strong>No enquiries yet</strong>
-          <p>New customer enquiries will appear here.</p>
+      <div className="enquiry-stats">
+        <div className="enquiry-stat">
+          <span>Total enquiries</span>
+          <strong>{enquiries.length}</strong>
+          <small>All customer requests</small>
         </div>
-      )}
+        <div className="enquiry-stat">
+          <span>Awaiting assignment</span>
+          <strong>{unassignedCount}</strong>
+          <small>Needs broker selection</small>
+        </div>
+        <div className="enquiry-stat">
+          <span>Assigned</span>
+          <strong>{assignedCount}</strong>
+          <small>Broker allocated</small>
+        </div>
+        <div className="enquiry-stat">
+          <span>Closed</span>
+          <strong>{closedCount}</strong>
+          <small>Marked as closed</small>
+        </div>
+      </div>
 
-      {!loading &&
-        enquiries.map((enquiry) => {
-          const result = recommendations[enquiry.id];
-          const isRecommendationLoading =
-            recommendationLoading[enquiry.id] ?? false;
-          const recommendationError =
-            recommendationErrors[enquiry.id] || "";
+      <div className="panel enquiries-panel">
+        <div className="enquiries-toolbar">
+          <div>
+            <h3>Customer enquiries</h3>
+            <p>
+              {loading
+                ? "Loading your latest enquiries..."
+                : `${filteredEnquiries.length} of ${enquiries.length} enquiries`}
+            </p>
+          </div>
+          <input
+            className="enquiry-search"
+            type="search"
+            placeholder="Search IDs, message or status..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search enquiries"
+          />
+        </div>
 
-          return (
-            <div className="kyc-row" key={enquiry.id}>
-              <div>
-                <strong>Property enquiry</strong>
-                <p>Status: {enquiry.status}</p>
-                <p>Customer ID: {enquiry.customer_id}</p>
-                <p>Property ID: {enquiry.property_id}</p>
-                <p>
-                  {enquiry.customer_message || "No message provided."}
-                </p>
+        <div className="enquiry-filters" aria-label="Filter enquiries">
+          {[
+            ["all", "All"],
+            ["unassigned", "Unassigned"],
+            ["assigned", "Assigned"],
+            ["closed", "Closed"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              className={`enquiry-filter ${statusFilter === value ? "active" : ""}`}
+              onClick={() => setStatusFilter(value)}
+            >
+              {label}
+              {value === "all"
+                ? ` (${enquiries.length})`
+                : value === "unassigned"
+                  ? ` (${unassignedCount})`
+                  : value === "assigned"
+                    ? ` (${assignedCount})`
+                    : ` (${closedCount})`}
+            </button>
+          ))}
+        </div>
 
-                {enquiry.assigned_broker_id ? (
-                  <p>
-                    Assigned broker ID: {enquiry.assigned_broker_id}
-                  </p>
+        {loading && <p className="enquiries-message">Loading enquiries...</p>}
+
+        {!loading && enquiries.length === 0 && !error && (
+          <div className="empty-state">
+            <strong>No enquiries yet</strong>
+            <p>Customer property enquiries will appear here.</p>
+          </div>
+        )}
+
+        {!loading && enquiries.length > 0 && filteredEnquiries.length === 0 && (
+          <div className="empty-state">
+            <strong>No matching enquiries</strong>
+            <p>Try a different search or status filter.</p>
+            <button
+              className="secondary-button"
+              onClick={() => {
+                setSearch("");
+                setStatusFilter("all");
+              }}
+            >
+              Clear filters
+            </button>
+          </div>
+        )}
+
+        {!loading &&
+          filteredEnquiries.map((enquiry) => {
+            const result = recommendations[enquiry.id];
+            const isLoading = recommendationLoading[enquiry.id] ?? false;
+            const recommendationError =
+              recommendationErrors[enquiry.id] || "";
+            const isAssigned = Boolean(enquiry.assigned_broker_id);
+
+            return (
+              <article className="enquiry-card" key={enquiry.id}>
+                <div className="enquiry-card-header">
+                  <div>
+                    <span className="eyebrow">PROPERTY ENQUIRY</span>
+                    <h4>
+                      {enquiry.customer_message?.trim() ||
+                        "Property information request"}
+                    </h4>
+                  </div>
+                  <span
+                    className={`enquiry-status ${isAssigned ? "assigned" : "pending"}`}
+                  >
+                    {enquiry.status.replaceAll("_", " ")}
+                  </span>
+                </div>
+
+               <div className="enquiry-details-grid">
+  <div>
+    <span>Customer</span>
+    <strong>{enquiry.customer_name || "Name unavailable"}</strong>
+    <small>{enquiry.customer_email || "Email unavailable"}</small>
+    {enquiry.customer_phone && (
+      <small>{enquiry.customer_phone}</small>
+    )}
+  </div>
+
+  <div>
+    <span>Property</span>
+    <strong>
+      {enquiry.property_title || "Property details unavailable"}
+    </strong>
+    <small>
+      {[enquiry.property_type, enquiry.property_status]
+        .filter(Boolean)
+        .join(" · ") || "Type/status unavailable"}
+    </small>
+    {enquiry.property_price != null && (
+      <small>
+        Price: ₹{Number(enquiry.property_price).toLocaleString("en-IN")}
+      </small>
+    )}
+    <small>
+      {[enquiry.property_address, enquiry.property_pincode]
+        .filter(Boolean)
+        .join(", ") || "Address unavailable"}
+    </small>
+  </div>
+
+  <div>
+    <span>Enquiry details</span>
+    <strong>
+      {enquiry.created_at
+        ? new Date(enquiry.created_at).toLocaleString()
+        : "Date unavailable"}
+    </strong>
+    <small>
+      Enquiry ID: {enquiry.id.slice(0, 8)}…
+    </small>
+  </div>
+</div>
+
+                {isAssigned ? (
+                  <div className="assigned-summary">
+  <span className="assigned-icon">✓</span>
+  <div>
+    <strong>
+      {enquiry.assigned_broker_name || "Broker assigned"}
+    </strong>
+    <p>
+      {enquiry.assigned_broker_business_name ||
+        "Business name unavailable"}
+    </p>
+    <small>
+      Assignment ID: {enquiry.assigned_broker_id?.slice(0, 8)}…
+    </small>
+  </div>
+</div>
                 ) : (
-                  <>
-                    <strong>Broker recommendations</strong>
-
+                  <div className="recommendation-section">
                     {!result && (
-                      <div>
+                      <div className="recommendation-intro">
+                        <div>
+                          <strong>Find the right broker</strong>
+                          <p>
+                            Rank eligible verified brokers by registered
+                            pincode match.
+                          </p>
+                        </div>
                         <button
                           className="primary-button"
-                          disabled={isRecommendationLoading}
+                          disabled={isLoading}
                           onClick={() =>
                             void loadRecommendations(enquiry.id)
                           }
-                          style={{ marginTop: 8 }}
                         >
-                          {isRecommendationLoading
-                            ? "Finding brokers..."
-                            : "Find recommended brokers"}
+                          {isLoading ? "Finding..." : "Find brokers"}
                         </button>
                       </div>
                     )}
@@ -283,11 +478,10 @@ function EnquiriesPanel() {
                       <div className="login-error">
                         {recommendationError}
                         <button
-                          className="primary-button"
+                          className="secondary-button"
                           onClick={() =>
                             void loadRecommendations(enquiry.id)
                           }
-                          style={{ marginLeft: 8 }}
                         >
                           Retry
                         </button>
@@ -296,82 +490,95 @@ function EnquiriesPanel() {
 
                     {result && (
                       <>
-                        <p>
-                          Property pincode:{" "}
-                          {result.property_pincode || "Not provided"}
-                        </p>
-                        <p>
-                          Matching uses registered pincodes, not confirmed
-                          service areas.
+                        <div className="recommendation-intro">
+                          <div>
+                            <strong>Recommended brokers</strong>
+                            <p>
+                              Property pincode:{" "}
+                              {result.property_pincode || "Not provided"}
+                            </p>
+                          </div>
+                          <button
+                            className="secondary-button"
+                            disabled={isLoading}
+                            onClick={() =>
+                              void loadRecommendations(enquiry.id)
+                            }
+                          >
+                            {isLoading ? "Refreshing..." : "Refresh"}
+                          </button>
+                        </div>
+
+                        <p className="matching-note">
+                          Registered-pincode matches appear first. A match
+                          does not confirm the broker's service area.
                         </p>
 
                         {result.recommendations.length === 0 ? (
-                          <p>
+                          <p className="enquiries-message">
                             No eligible verified brokers are available.
                           </p>
                         ) : (
                           result.recommendations.map((broker) => (
                             <div
+                              className="recommended-broker"
                               key={broker.user_id}
-                              className="detail-card"
-                              style={{ marginTop: 10 }}
                             >
-                              <strong>
-                                {broker.full_name || broker.email}
-                              </strong>
-                              <p>{broker.business_name || "Business name not provided"}</p>
-                              <p>{broker.email}</p>
-                              <p>
-                                Registered pincode:{" "}
-                                {broker.registered_pincode || "Not provided"}
-                              </p>
-                              <p>
-                                {broker.pincode_match
-                                  ? "✓ Registered pincode match"
-                                  : "No exact registered pincode match"}
-                              </p>
-                              <button
-                                className="primary-button"
-                                disabled={busyId === enquiry.id}
-                                onClick={() => void assign(enquiry, broker)}
-                                style={{ marginTop: 8 }}
-                              >
-                                {busyId === enquiry.id
-                                  ? "Assigning..."
-                                  : `Assign to ${broker.full_name || broker.email}`}
-                              </button>
+                              <div className="broker-info">
+                                <div className="broker-avatar">
+                                  {(broker.full_name || broker.email)
+                                    .charAt(0)
+                                    .toUpperCase()}
+                                </div>
+                                <div>
+                                  <strong>
+                                    {broker.full_name || broker.email}
+                                  </strong>
+                                  <p>
+                                    {broker.business_name ||
+                                      "Business name not provided"}
+                                  </p>
+                                  <p>{broker.email}</p>
+                                  <small>
+                                    Registered pincode:{" "}
+                                    {broker.registered_pincode ||
+                                      "Not provided"}
+                                  </small>
+                                </div>
+                              </div>
+                              <div className="broker-action">
+                                <span
+                                  className={`match-label ${broker.pincode_match ? "match" : "no-match"}`}
+                                >
+                                  {broker.pincode_match
+                                    ? "Pincode match"
+                                    : "Other eligible broker"}
+                                </span>
+                                <button
+                                  className="primary-button"
+                                  disabled={busyId === enquiry.id}
+                                  onClick={() => void assign(enquiry, broker)}
+                                >
+                                  {busyId === enquiry.id
+                                    ? "Assigning..."
+                                    : "Assign broker"}
+                                </button>
+                              </div>
                             </div>
                           ))
                         )}
-
-                        <button
-                          className="primary-button"
-                          disabled={isRecommendationLoading}
-                          onClick={() =>
-                            void loadRecommendations(enquiry.id)
-                          }
-                          style={{ marginTop: 10 }}
-                        >
-                          Refresh recommendations
-                        </button>
                       </>
                     )}
-
-                    {!result && brokers.length === 0 && !isRecommendationLoading && (
-                      <p>
-                        The existing KYC list contains no verified brokers.
-                        Use Find recommended brokers to check eligibility.
-                      </p>
-                    )}
-                  </>
+                  </div>
                 )}
-              </div>
-            </div>
-          );
-        })}
+              </article>
+            );
+          })}
+      </div>
     </section>
   );
 }
+
 
 
 
@@ -901,7 +1108,7 @@ async function rejectVerification() {
 
             {error && <div className="login-error">{error}</div>}
 
-            ```tsx
+           
 {!loading &&
   !error &&
   verifications.filter((verification) => verification.status === kycFilter)

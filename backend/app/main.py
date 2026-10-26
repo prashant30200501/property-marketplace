@@ -814,6 +814,7 @@ def create_enquiry(
     return enquiry
 
 
+
 @app.get("/admin/enquiries", response_model=list[EnquiryResponse])
 def get_admin_enquiries(
     db: Session = Depends(get_db),
@@ -825,7 +826,55 @@ def get_admin_enquiries(
         .all()
     )
 
-    return enquiries
+    results = []
+
+    for enquiry in enquiries:
+        customer = db.get(User, enquiry.customer_id)
+        property_data = db.get(Property, enquiry.property_id)
+        assigned_broker = (
+            db.get(User, enquiry.assigned_broker_id)
+            if enquiry.assigned_broker_id
+            else None
+        )
+
+        broker_profile = None
+        if assigned_broker:
+            broker_profile = (
+                db.query(BrokerProfile)
+                .filter(BrokerProfile.user_id == assigned_broker.id)
+                .first()
+            )
+
+        results.append(
+            {
+                "id": enquiry.id,
+                "customer_id": enquiry.customer_id,
+                "property_id": enquiry.property_id,
+                "assigned_broker_id": enquiry.assigned_broker_id,
+                "status": enquiry.status,
+                "customer_message": enquiry.customer_message,
+                "created_at": enquiry.created_at,
+                "closed_at": enquiry.closed_at,
+                "customer_name": customer.full_name if customer else None,
+                "customer_email": customer.email if customer else None,
+                "customer_phone": customer.phone if customer else None,
+                "property_title": property_data.title if property_data else None,
+                "property_type": property_data.property_type if property_data else None,
+                "property_price": property_data.price if property_data else None,
+                "property_address": property_data.address if property_data else None,
+                "property_pincode": property_data.pincode if property_data else None,
+                "property_status": property_data.status if property_data else None,
+                "assigned_broker_name": (
+                    assigned_broker.full_name if assigned_broker else None
+                ),
+                "assigned_broker_business_name": (
+                    broker_profile.business_name if broker_profile else None
+                ),
+            }
+        )
+
+    return results
+
 
 @app.get("/admin/enquiries/{enquiry_id}/broker-recommendations")
 def get_broker_recommendations(

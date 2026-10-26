@@ -1,5 +1,7 @@
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -7,94 +9,145 @@ import {
     View,
 } from "react-native";
 
-const properties = [
-  {
-    id: "1",
-    title: "Modern Family Villa",
-    location: "Vaishali Nagar, Jaipur",
-    price: "₹85 Lakh",
-    type: "Individual House",
-    listingType: "Buy",
-    details: "3 BHK • 1,850 sq.ft.",
-    emoji: "🏡",
-    description:
-      "A spacious family villa in a well-connected residential area of Jaipur.",
-    features: ["3 Bedrooms", "2 Bathrooms", "Parking", "Garden"],
-  },
-  {
-    id: "2",
-    title: "Premium City Apartment",
-    location: "Jagatpura, Jaipur",
-    price: "₹52 Lakh",
-    type: "Flat",
-    listingType: "Buy",
-    details: "2 BHK • 1,200 sq.ft.",
-    emoji: "🏢",
-    description:
-      "A comfortable apartment with convenient access to nearby amenities.",
-    features: ["2 Bedrooms", "2 Bathrooms", "Security", "Lift"],
-  },
-  {
-    id: "3",
-    title: "Comfortable Student PG",
-    location: "Gopalpura, Jaipur",
-    price: "₹8,000/month",
-    type: "PG",
-    listingType: "Rent",
-    details: "Single room • Furnished",
-    emoji: "🛏️",
-    description:
-      "A furnished PG option for students looking for accommodation in Jaipur.",
-    features: ["Furnished", "Single Room", "Student Friendly"],
-  },
-  {
-    id: "4",
-    title: "Commercial Office Space",
-    location: "Malviya Nagar, Jaipur",
-    price: "₹1.2 Crore",
-    type: "Office",
-    listingType: "Buy",
-    details: "Office • 2,000 sq.ft.",
-    emoji: "🏬",
-    description:
-      "A commercial office space suitable for business use.",
-    features: ["2,000 sq.ft.", "Office Space", "Commercial Area"],
-  },
-  {
-    id: "5",
-    title: "Retail Commercial Space",
-    location: "Tonk Road, Jaipur",
-    price: "₹35,000/month",
-    type: "Commercial Property",
-    listingType: "Rent",
-    details: "Shop • 850 sq.ft.",
-    emoji: "🏪",
-    description:
-      "A retail space available for rent in a commercial area.",
-    features: ["850 sq.ft.", "Retail Space", "Road Access"],
-  },
-];
+import { getProperties } from "../services/api";
+
+type Property = {
+  id: string;
+  title: string;
+  description?: string | null;
+  property_type: string;
+  price: number | string;
+  address: string;
+  pincode: string;
+  status: string;
+  created_at: string;
+};
+
+function formatPrice(price: number | string): string {
+  const amount = Number(price);
+
+  if (!Number.isFinite(amount)) {
+    return "Price on request";
+  }
+
+  return `₹${amount.toLocaleString("en-IN")}`;
+}
+
+function getPropertyEmoji(propertyType: string): string {
+  switch (propertyType.toLowerCase()) {
+    case "residential":
+      return "🏡";
+    case "commercial":
+      return "🏬";
+    case "land":
+      return "🌳";
+    default:
+      return "🏠";
+  }
+}
+
+function getPropertyTypeLabel(propertyType: string): string {
+  switch (propertyType.toLowerCase()) {
+    case "residential":
+      return "Residential Property";
+    case "commercial":
+      return "Commercial Property";
+    case "land":
+      return "Land";
+    default:
+      return propertyType;
+  }
+}
 
 export default function PropertyDetailsScreen() {
   const router = useRouter();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const params = useLocalSearchParams<{ id?: string | string[] }>();
 
-  const property = properties.find((item) => item.id === id);
+  const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
-  if (!property) {
+  const [property, setProperty] = useState<Property | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const loadProperty = useCallback(async () => {
+    if (!id) {
+      setProperty(null);
+      setError("No property was selected. Please return to the listings.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = (await getProperties()) as Property[];
+
+      const selectedProperty = data.find(
+        (item) => String(item.id) === String(id)
+      );
+
+      if (!selectedProperty) {
+        setProperty(null);
+        setError("");
+      } else {
+        setProperty(selectedProperty);
+      }
+    } catch (err) {
+      setProperty(null);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load property details. Please try again."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadProperty();
+  }, [loadProperty]);
+
+  if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.notFound}>Property not found.</Text>
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color="#173F35" />
+        <Text style={styles.stateText}>Loading property details...</Text>
+      </View>
+    );
+  }
+
+  if (error || !property) {
+    return (
+      <View style={styles.centerContainer}>
+        <Text style={styles.notFound}>
+          {error ? "Unable to load property" : "Property not found"}
+        </Text>
+
+        <Text style={styles.stateText}>
+          {error ||
+            "This property may no longer be available or may not appear in the current listings."}
+        </Text>
+
+        {error ? (
+          <Pressable style={styles.retryButton} onPress={loadProperty}>
+            <Text style={styles.retryButtonText}>Try again</Text>
+          </Pressable>
+        ) : null}
 
         <Pressable
           style={styles.backButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.backButtonText}>Go back</Text>
+          <Text style={styles.backButtonText}>← Go back to properties</Text>
         </Pressable>
       </View>
     );
   }
+
+  const price = formatPrice(property.price);
+  const propertyType = getPropertyTypeLabel(property.property_type);
 
   return (
     <ScrollView
@@ -110,67 +163,58 @@ export default function PropertyDetailsScreen() {
       </Pressable>
 
       <View style={styles.image}>
-        <Text style={styles.emoji}>{property.emoji}</Text>
+        <Text style={styles.emoji}>
+          {getPropertyEmoji(property.property_type)}
+        </Text>
 
         <View style={styles.tag}>
-          <Text style={styles.tagText}>{property.type}</Text>
+          <Text style={styles.tagText}>{propertyType}</Text>
         </View>
       </View>
 
       <View style={styles.detailsCard}>
         <Text style={styles.listingType}>
-          For {property.listingType}
+          {property.status === "available" ? "Available" : property.status}
         </Text>
 
-        <Text style={styles.price}>{property.price}</Text>
+        <Text style={styles.price}>{price}</Text>
 
         <Text style={styles.title}>{property.title}</Text>
 
-        <Text style={styles.location}>
-          📍 {property.location}
-        </Text>
+        <Text style={styles.location}>📍 {property.address}</Text>
+
+        <Text style={styles.pincode}>PIN code: {property.pincode}</Text>
 
         <View style={styles.divider} />
 
         <Text style={styles.sectionTitle}>Property overview</Text>
-        <Text style={styles.overview}>{property.details}</Text>
+        <Text style={styles.overview}>{propertyType}</Text>
 
         <Text style={styles.sectionTitle}>About this property</Text>
         <Text style={styles.description}>
-          {property.description}
+          {property.description?.trim() ||
+            "The broker has not added a description for this property yet."}
         </Text>
 
-        <Text style={styles.sectionTitle}>Features</Text>
-
-        <View style={styles.features}>
-          {property.features.map((feature) => (
-            <View key={feature} style={styles.feature}>
-              <Text style={styles.featureText}>✓ {feature}</Text>
-            </View>
-          ))}
-        </View>
-
-       <Pressable
-  style={styles.enquiryButton}
-  onPress={() =>
-    router.push({
-      pathname: "/enquiry-confirmation",
-      params: {
-        propertyId: property.id,
-        title: property.title,
-        location: property.location,
-        price: property.price,
-      },
-    })
-  }
->
-  <Text style={styles.enquiryButtonText}>
-    Enquire Now
-  </Text>
-</Pressable>
+        <Pressable
+          style={styles.enquiryButton}
+          onPress={() =>
+            router.push({
+              pathname: "/enquiry-confirmation",
+              params: {
+                propertyId: String(property.id),
+                title: property.title,
+                location: property.address,
+                price,
+              },
+            })
+          }
+        >
+          <Text style={styles.enquiryButtonText}>Enquire Now</Text>
+        </Pressable>
 
         <Text style={styles.disclaimer}>
-          Sample property details for demonstration only.
+          Property information is provided by the listing broker.
         </Text>
       </View>
     </ScrollView>
@@ -186,6 +230,20 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingTop: 24,
     paddingBottom: 40,
+  },
+  centerContainer: {
+    flex: 1,
+    backgroundColor: "#F8F8F5",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+  },
+  stateText: {
+    color: "#6F786F",
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: "center",
+    marginTop: 12,
   },
   backButton: {
     alignSelf: "flex-start",
@@ -235,6 +293,7 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     marginBottom: 8,
+    textTransform: "capitalize",
   },
   price: {
     color: "#173F35",
@@ -251,6 +310,11 @@ const styles = StyleSheet.create({
     color: "#7B827C",
     fontSize: 14,
     marginTop: 10,
+  },
+  pincode: {
+    color: "#7B827C",
+    fontSize: 13,
+    marginTop: 6,
   },
   divider: {
     height: 1,
@@ -272,22 +336,6 @@ const styles = StyleSheet.create({
     color: "#6F786F",
     fontSize: 14,
     lineHeight: 22,
-  },
-  features: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-  },
-  feature: {
-    backgroundColor: "#F1F5F0",
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  featureText: {
-    color: "#365B47",
-    fontSize: 13,
-    fontWeight: "600",
   },
   enquiryButton: {
     backgroundColor: "#173F35",
@@ -312,6 +360,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "700",
     textAlign: "center",
-    marginTop: 40,
+  },
+  retryButton: {
+    backgroundColor: "#173F35",
+    borderRadius: 10,
+    paddingHorizontal: 22,
+    paddingVertical: 12,
+    marginTop: 20,
+  },
+  retryButtonText: {
+    color: "#FFFFFF",
+    fontSize: 14,
+    fontWeight: "700",
   },
 });

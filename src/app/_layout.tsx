@@ -25,6 +25,10 @@ export default function RootLayout() {
   name="profile-setup"
   options={{ headerShown: false }}
 />
+<Stack.Screen
+  name="admin-enquiries"
+  options={{ headerShown: false }}
+/>
 </Stack>
     </ThemeProvider>
   );

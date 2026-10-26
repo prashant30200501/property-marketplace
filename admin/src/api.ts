@@ -231,6 +231,7 @@ export async function getAdminVerificationDocument(
 
 
 
+
 export type AdminEnquiry = {
   id: string;
   customer_id: string;
@@ -238,7 +239,21 @@ export type AdminEnquiry = {
   assigned_broker_id: string | null;
   status: string;
   customer_message: string | null;
+  created_at?: string | null;
+  closed_at?: string | null;
+  customer_name?: string | null;
+  customer_email?: string | null;
+  customer_phone?: string | null;
+  property_title?: string | null;
+  property_type?: string | null;
+  property_price?: number | string | null;
+  property_address?: string | null;
+  property_pincode?: string | null;
+  property_status?: string | null;
+  assigned_broker_name?: string | null;
+  assigned_broker_business_name?: string | null;
 };
+
 
 export async function getAdminEnquiries(): Promise<AdminEnquiry[]> {
   const token = getAdminToken();

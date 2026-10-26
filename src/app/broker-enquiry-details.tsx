@@ -1,7 +1,8 @@
 
 import { router, useLocalSearchParams } from "expo-router";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
+    ActivityIndicator,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -9,33 +10,81 @@ import {
     View,
 } from "react-native";
 import {
-    enquiries,
-    updateEnquiryStatus,
-    type EnquiryStatus,
-} from "../data/enquiries";
-
+    getBrokerEnquiry,
+    type BrokerEnquiryResponse,
+} from "../services/api";
 
 export default function BrokerEnquiryDetailsScreen() {
   const { enquiryId } = useLocalSearchParams<{
     enquiryId: string;
   }>();
 
-  const enquiry = enquiries.find(
-    (item) => item.id === enquiryId
-  );
-  const [status, setStatus] = useState<EnquiryStatus>(
-  enquiry?.status ?? "New"
-);
+  const [enquiry, setEnquiry] =
+    useState<BrokerEnquiryResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  if (!enquiry) {
+  const loadEnquiry = useCallback(async () => {
+    if (!enquiryId || Array.isArray(enquiryId)) {
+      setError("Invalid enquiry ID.");
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await getBrokerEnquiry(enquiryId);
+      setEnquiry(data);
+    } catch (err) {
+      setEnquiry(null);
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Unable to load enquiry."
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [enquiryId]);
+
+  useEffect(() => {
+  loadEnquiry();
+}, [loadEnquiry]);
+
+  if (loading) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.heading}>Enquiry not found</Text>
+      <View style={[styles.container, styles.centered]}>
+        <ActivityIndicator size="large" color="#173F35" />
+        <Text style={styles.muted}>Loading enquiry details...</Text>
+      </View>
+    );
+  }
+
+  if (error || !enquiry) {
+    return (
+      <View style={[styles.container, styles.content]}>
+        <Text style={styles.heading}>
+          {error.includes("404")
+            ? "Enquiry not found"
+            : "Unable to load enquiry"}
+        </Text>
+        <Text style={styles.muted}>
+          {error || "This enquiry could not be found."}
+        </Text>
+
+        <Pressable style={styles.button} onPress={loadEnquiry}>
+          <Text style={styles.buttonText}>Try Again</Text>
+        </Pressable>
+
         <Pressable
-          style={styles.button}
+          style={styles.secondaryButton}
           onPress={() => router.back()}
         >
-          <Text style={styles.buttonText}>Go Back</Text>
+          <Text style={styles.secondaryButtonText}>
+            Go Back
+          </Text>
         </Pressable>
       </View>
     );
@@ -51,111 +100,58 @@ export default function BrokerEnquiryDetailsScreen() {
       </Pressable>
 
       <Text style={styles.heading}>Enquiry Details</Text>
-      <Text style={styles.reference}>{enquiry.id}</Text>
+      <Text style={styles.reference}>
+        Reference: {enquiry.id}
+      </Text>
 
       <View style={styles.statusBadge}>
         <Text style={styles.statusText}>
-          {status}
+          {enquiry.status}
         </Text>
-      </View>
-      <View style={styles.card}>
-  <Text style={styles.sectionTitle}>Update Enquiry Status</Text>
-
-  <View style={styles.statusOptions}>
-    {["New", "Contacted", "Site Visit", "Converted", "Closed"].map(
-      (item) => (
-        <Pressable
-          key={item}
-          style={[
-            styles.statusOption,
-            status === item && styles.selectedStatusOption,
-          ]}
-          onPress={() => {
-  setStatus(item as EnquiryStatus);
-  updateEnquiryStatus(enquiry.id, item as EnquiryStatus);
-}}
-        >
-          <Text
-            style={[
-              styles.statusOptionText,
-              status === item && styles.selectedStatusOptionText,
-            ]}
-          >
-            {item}
-          </Text>
-        </Pressable>
-      )
-    )}
-  </View>
-
-  <Text style={styles.statusHint}>
-    Select the current stage of this enquiry.
-  </Text>
-</View>
-
-      <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Property</Text>
-        <Text style={styles.propertyTitle}>
-          {enquiry.property}
-        </Text>
-        <Text style={styles.detail}>
-          📍 {enquiry.location}
-        </Text>
-        <Text style={styles.price}>{enquiry.price}</Text>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Customer</Text>
-        <Text style={styles.customerName}>
-          {enquiry.customer}
-        </Text>
-        <Text style={styles.detail}>
-          Phone: {enquiry.phone}
+        <Text style={styles.sectionTitle}>PROPERTY</Text>
+        <Text style={styles.detailLabel}>Property ID</Text>
+        <Text style={styles.value}>
+          {enquiry.property_id || "Not available"}
         </Text>
       </View>
 
-      
-<View style={styles.card}>
-  <Text style={styles.sectionTitle}>
-    Enquiry Activity Timeline
-  </Text>
-
-  {enquiry.history.map((activity, index) => (
-    <View key={`${activity.status}-${index}`} style={styles.timelineItem}>
-      <View style={styles.timelineIndicator}>
-        <View style={styles.timelineDot} />
-
-        {index !== enquiry.history.length - 1 && (
-          <View style={styles.timelineLine} />
-        )}
-      </View>
-
-      <View style={styles.timelineContent}>
-        <Text style={styles.timelineStatus}>
-          {activity.status}
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>CUSTOMER</Text>
+        <Text style={styles.detailLabel}>Customer ID</Text>
+        <Text style={styles.value}>
+          {enquiry.customer_id || "Not available"}
         </Text>
 
-        <Text style={styles.timelineTimestamp}>
-          {activity.timestamp}
+        <Text style={[styles.detailLabel, styles.messageLabel]}>
+          Customer message
+        </Text>
+        <Text style={styles.message}>
+          {enquiry.customer_message?.trim() ||
+            "No message was provided."}
         </Text>
       </View>
-    </View>
-  ))}
 
-  <View style={styles.currentStatusBox}>
-    <Text style={styles.currentStatusLabel}>
-      CURRENT STATUS
-    </Text>
-    <Text style={styles.currentStatusValue}>
-      {status}
-    </Text>
-  </View>
-</View>
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>ASSIGNMENT</Text>
+        <Text style={styles.detailLabel}>Assigned broker ID</Text>
+        <Text style={styles.value}>
+          {enquiry.assigned_broker_id || "Not assigned"}
+        </Text>
+      </View>
 
-      <Text style={styles.disclaimer}>
-        Sample data only. Calling customers and updating
-        enquiry statuses will be connected later.
-      </Text>
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>ENQUIRY STATUS</Text>
+        <Text style={styles.value}>
+          Current status: {enquiry.status}
+        </Text>
+        <Text style={styles.disclaimer}>
+          Status changes are not connected yet. This screen
+          displays the status saved by the server.
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -164,6 +160,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#F8F8F5",
+  },
+  centered: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
   },
   content: {
     padding: 20,
@@ -215,29 +216,30 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 14,
   },
-  propertyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#263B30",
-    marginBottom: 10,
-  },
-  detail: {
-    fontSize: 14,
-    color: "#666",
-    lineHeight: 22,
+  detailLabel: {
+    fontSize: 12,
+    color: "#777",
     marginBottom: 6,
   },
-  price: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#47765E",
-    marginTop: 8,
-  },
-  customerName: {
-    fontSize: 17,
-    fontWeight: "700",
+  value: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "#263B30",
-    marginBottom: 8,
+    lineHeight: 21,
+  },
+  messageLabel: {
+    marginTop: 18,
+  },
+  message: {
+    fontSize: 14,
+    color: "#526057",
+    lineHeight: 22,
+  },
+  muted: {
+    color: "#777",
+    fontSize: 14,
+    lineHeight: 21,
+    marginTop: 12,
   },
   button: {
     backgroundColor: "#173F35",
@@ -250,97 +252,19 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "700",
   },
+  secondaryButton: {
+    padding: 15,
+    alignItems: "center",
+    marginTop: 8,
+  },
+  secondaryButtonText: {
+    color: "#47765E",
+    fontWeight: "700",
+  },
   disclaimer: {
     color: "#999",
     fontSize: 12,
     lineHeight: 18,
-    textAlign: "center",
-    marginTop: 8,
-  },
-    statusOptions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  statusOption: {
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: "#DDE5DF",
-    backgroundColor: "#FFFFFF",
-  },
-  selectedStatusOption: {
-    backgroundColor: "#173F35",
-    borderColor: "#173F35",
-  },
-  statusOptionText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#526057",
-  },
-  selectedStatusOptionText: {
-    color: "#FFFFFF",
-  },
-  statusHint: {
-    fontSize: 12,
-    color: "#888",
-    marginTop: 14,
-  },
-
-  timelineItem: {
-    flexDirection: "row",
-    minHeight: 62,
-  },
-  timelineIndicator: {
-    width: 24,
-    alignItems: "center",
-    marginRight: 12,
-  },
-  timelineDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: "#47765E",
-    marginTop: 4,
-  },
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: "#DDE5DF",
-    marginTop: 4,
-    marginBottom: -2,
-  },
-  timelineContent: {
-    flex: 1,
-    paddingBottom: 20,
-  },
-  timelineStatus: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#263B30",
-  },
-  timelineTimestamp: {
-    fontSize: 12,
-    color: "#888",
-    marginTop: 5,
-  },
-  currentStatusBox: {
-    backgroundColor: "#EAF1EB",
-    borderRadius: 10,
-    padding: 14,
-    marginTop: 8,
-  },
-  currentStatusLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: "#668071",
-    marginBottom: 5,
-  },
-  currentStatusValue: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: "#173F35",
+    marginTop: 12,
   },
 });

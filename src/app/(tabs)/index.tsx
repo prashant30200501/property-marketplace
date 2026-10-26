@@ -17,7 +17,11 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { loginUser, loginWithGoogle } from "../../services/api";
+import {
+  getCurrentUser,
+  loginUser,
+  loginWithGoogle,
+} from "../../services/api";
 const COLORS = {
   navy: "#0D1B2A",
   navyLight: "#172A40",
@@ -93,7 +97,14 @@ export default function LoginScreen() {
       return;
     }
 
-    router.replace("/customer-home");
+   const user = await getCurrentUser();
+
+Alert.alert(
+  "Your Nestora Account",
+  JSON.stringify(user, null, 2)
+);
+
+router.replace("/customer");
   } catch (error: any) {
     console.error("Google sign-in failed:", error);
 
@@ -174,7 +185,7 @@ export default function LoginScreen() {
             onPress: () =>
               router.replace(
                 backendRole === "Customer"
-                  ? "/customer-home"
+                  ? "/customer"
                   : "/broker-home"
               ),
           },

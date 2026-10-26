@@ -204,6 +204,33 @@ export async function updateProperty(
   return response.json();
 }
 
+export async function createEnquiry(enquiry: {
+  property_id: string;
+  customer_message?: string;
+}) {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("Please sign in before submitting an enquiry.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/enquiries`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(enquiry),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Failed to submit enquiry: ${response.status} ${errorText}`);
+  }
+
+  return response.json();
+}
+
 export async function createProperty(property: {
   title: string;
   description?: string;
@@ -373,6 +400,117 @@ export async function uploadKycDocument(
 
     throw new Error(
       `Failed to upload ${documentType}: ${response.status} ${errorText}`,
+    );
+  }
+
+  return response.json();
+}
+
+export async function getAdminEnquiries() {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("Please sign in as an admin.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/admin/enquiries`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to load enquiries: ${response.status} ${await response.text()}`
+    );
+  }
+
+  return response.json();
+}
+
+export async function getAdminBrokers() {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("Please sign in as an admin.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/admin/verifications`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Failed to load brokers: ${response.status} ${await response.text()}`
+    );
+  }
+
+  const records = await response.json();
+
+  return records.filter(
+    (broker: { status: string }) => broker.status === "verified"
+  );
+}
+
+
+export type BrokerEnquiryResponse = {
+  id: string;
+  customer_id: string;
+  property_id: string;
+  assigned_broker_id: string | null;
+  status: string;
+  customer_message: string | null;
+};
+
+export async function getBrokerEnquiries(): Promise<BrokerEnquiryResponse[]> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("Please log in to view your enquiries.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/broker/enquiries`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to load broker enquiries: ${response.status} ${errorText}`
+    );
+  }
+
+  return response.json();
+}
+
+
+
+export async function getBrokerEnquiry(
+  enquiryId: string
+): Promise<BrokerEnquiryResponse> {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("Please log in to view this enquiry.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/broker/enquiries/${encodeURIComponent(enquiryId)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    }
+  );
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to load enquiry: ${response.status} ${errorText}`
     );
   }
 
