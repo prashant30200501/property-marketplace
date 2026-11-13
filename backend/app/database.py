@@ -1,17 +1,17 @@
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from app.config import settings
 
-
-# Create the database engine
 engine = create_engine(
     settings.database_url,
-    echo=True,
+    echo=False,
+    pool_pre_ping=True,
+    pool_recycle=300,
+    connect_args={"connect_timeout": 10},
 )
 
-
-# Create database sessions
 SessionLocal = sessionmaker(
     bind=engine,
     autoflush=False,
@@ -19,12 +19,10 @@ SessionLocal = sessionmaker(
 )
 
 
-# Base class for all database models
 class Base(DeclarativeBase):
     pass
 
 
-# Dependency for FastAPI routes
 def get_db():
     db = SessionLocal()
     try:

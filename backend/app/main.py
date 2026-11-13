@@ -8,6 +8,9 @@ from app.schemas.user import UserCreate, UserResponse
 from fastapi.responses import Response
 from io import BytesIO
 from PIL import Image, UnidentifiedImageError
+from contextlib import asynccontextmanager
+from app.database import Base, engine
+import app.models
 
 from sqlalchemy.exc import IntegrityError
 import uuid
@@ -61,10 +64,17 @@ from google.auth.transport import requests as google_requests
 from app.schemas.auth import GoogleLoginRequest
 from app.config import settings
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    Base.metadata.create_all(bind=engine)
+    yield
+
+
 app = FastAPI(
     title="Nestora API",
     description="Backend API for the Nestora property marketplace",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -97,7 +107,7 @@ def database_health(db: Session = Depends(get_db)):
 
     return {
         "status": "connected",
-        "database": "Render PostgreSQL",
+       "database": "PostgreSQL",
         "test_query": result,
     }
 @app.get("/properties", response_model=List[PropertyResponse])

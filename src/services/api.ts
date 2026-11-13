@@ -2,7 +2,7 @@ import { File } from "expo-file-system";
 import * as SecureStore from "expo-secure-store";
 import { fetch as expoFetch } from "expo/fetch";
 import { Platform } from "react-native";
-const API_BASE_URL = "https://nestora-api-3xpy.onrender.com";
+const API_BASE_URL = "https://nestora-api-378404190429.asia-south1.run.app";
 
 const TOKEN_KEY = "nestora_access_token";
 

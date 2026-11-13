@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://nestora-api-3xpy.onrender.com";
+const API_BASE_URL = "https://nestora-api-378404190429.asia-south1.run.app";
 
 const TOKEN_KEY = "nestora_admin_token";
 
