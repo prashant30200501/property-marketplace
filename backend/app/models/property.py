@@ -57,10 +57,17 @@ class Property(Base):
         nullable=False,
     )
 
+    # New properties must be reviewed before public listing.
     status: Mapped[str] = mapped_column(
-        String(20),
-        default="available",
+        String(30),
+        default="pending_review",
+        server_default="pending_review",
         nullable=False,
+    )
+
+    moderation_reason: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     created_by: Mapped[uuid.UUID] = mapped_column(

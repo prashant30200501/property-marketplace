@@ -40,6 +40,7 @@ from app.schemas.property import (
     PropertyCreate,
     PropertyResponse,
     PropertyUpdate,
+    PropertyReview,
 )
 
 
@@ -202,7 +203,6 @@ def get_my_properties(
     )
 
     return properties
-
 @app.put("/properties/{property_id}", response_model=PropertyResponse)
 def update_property(
     property_id: uuid.UUID,
@@ -226,8 +226,13 @@ def update_property(
 
     update_data = property_data.model_dump(exclude_unset=True)
 
-    for field, value in update_data.items():
-        setattr(property, field, value)
+    if update_data:
+        for field, value in update_data.items():
+            setattr(property, field, value)
+
+        # Any edit requires admin review again.
+        property.status = "pending_review"
+        property.moderation_reason = None
 
     db.commit()
     db.refresh(property)
@@ -240,8 +245,6 @@ def create_property(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_verified_broker),
 ):
-
-
     property = Property(
         title=property_data.title,
         description=property_data.description,
@@ -250,9 +253,75 @@ def create_property(
         address=property_data.address,
         pincode=property_data.pincode,
         created_by=current_user.id,
+        status="pending_review",
     )
 
     db.add(property)
+    db.commit()
+    db.refresh(property)
+
+    return property
+
+@app.get("/admin/properties", response_model=list[PropertyResponse])
+def get_admin_properties(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    properties = (
+        db.query(Property)
+        .order_by(Property.created_at.desc())
+        .all()
+    )
+
+    return properties
+
+
+@app.patch(
+    "/admin/properties/{property_id}/review",
+    response_model=PropertyResponse,
+)
+def review_property(
+    property_id: uuid.UUID,
+    review_data: PropertyReview,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    property = db.get(Property, property_id)
+
+    if property is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Property not found.",
+        )
+
+    if property.status != "pending_review":
+        raise HTTPException(
+            status_code=400,
+            detail="Only properties pending review can be approved or rejected.",
+        )
+
+    if review_data.status not in ["available", "rejected"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Review status must be available or rejected.",
+        )
+
+    if (
+        review_data.status == "rejected"
+        and not review_data.moderation_reason
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="A rejection reason is required.",
+        )
+
+    property.status = review_data.status
+    property.moderation_reason = (
+        review_data.moderation_reason
+        if review_data.status == "rejected"
+        else None
+    )
+
     db.commit()
     db.refresh(property)
 

@@ -14,7 +14,6 @@ class PropertyCreate(BaseModel):
     address: str
     pincode: str
 
-from typing import Optional
 
 class PropertyUpdate(BaseModel):
     title: Optional[str] = None
@@ -23,6 +22,7 @@ class PropertyUpdate(BaseModel):
     price: Optional[Decimal] = None
     address: Optional[str] = None
     pincode: Optional[str] = None
+
 
 class PropertyResponse(BaseModel):
     id: uuid.UUID
@@ -33,6 +33,11 @@ class PropertyResponse(BaseModel):
     address: str
     pincode: str
     status: str
+    moderation_reason: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+class PropertyReview(BaseModel):
+    status: str
+    moderation_reason: Optional[str] = None
