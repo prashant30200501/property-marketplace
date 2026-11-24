@@ -508,6 +508,65 @@ def get_property_photo(
     )
 
 
+@app.get("/admin/properties/{property_id}/photos")
+def get_admin_property_photos(
+    property_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    property = db.get(Property, property_id)
+    if property is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+
+    photos = (
+        db.query(PropertyPhoto)
+        .filter(PropertyPhoto.property_id == property_id)
+        .order_by(PropertyPhoto.display_order.asc())
+        .all()
+    )
+    return [
+        {"id": str(photo.id), "display_order": photo.display_order}
+        for photo in photos
+    ]
+
+
+@app.get("/admin/properties/{property_id}/photos/{photo_id}")
+def get_admin_property_photo(
+    property_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_admin_user),
+):
+    property = db.get(Property, property_id)
+    if property is None:
+        raise HTTPException(status_code=404, detail="Property not found.")
+
+    photo = (
+        db.query(PropertyPhoto)
+        .filter(
+            PropertyPhoto.id == photo_id,
+            PropertyPhoto.property_id == property_id,
+        )
+        .first()
+    )
+    if photo is None:
+        raise HTTPException(status_code=404, detail="Photo not found.")
+
+    try:
+        image_data = get_photos_bucket().blob(photo.object_name).download_as_bytes()
+    except Exception:
+        raise HTTPException(status_code=404, detail="Photo file not found.")
+
+    return Response(
+        content=image_data,
+        media_type=photo.content_type,
+        headers={
+            "Cache-Control": "private, no-store",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
+
 @app.get("/admin/properties", response_model=list[PropertyResponse])
 def get_admin_properties(
     db: Session = Depends(get_db),
