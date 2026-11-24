@@ -1,6 +1,7 @@
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+    Image,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -8,7 +9,7 @@ import {
     TextInput,
     View,
 } from "react-native";
-import { getProperties } from "../services/api";
+import { getProperties, getPropertyPhotos } from "../services/api";
 
 const propertyTypes = [
   "All",
@@ -53,13 +54,25 @@ async function loadProperties() {
           : property.property_type,
       listingType: "Buy",
       details: property.description || "Property details available",
+      coverPhotoUrl: undefined as string | undefined,
       emoji:
         property.property_type === "commercial"
           ? "🏬"
           : "🏡",
     }));
 
-    setProperties(formattedProperties);
+    const listingsWithPhotos = await Promise.all(
+      formattedProperties.map(async (property: any) => {
+        try {
+          const photos = await getPropertyPhotos(String(property.id));
+          return { ...property, coverPhotoUrl: photos[0]?.imageUrl };
+        } catch {
+          return property;
+        }
+      })
+    );
+
+    setProperties(listingsWithPhotos);
   } catch (error) {
     console.error("Failed to load properties:", error);
     setError("Unable to load properties.");
@@ -228,9 +241,17 @@ const filteredProperties = properties.filter((property) => {
 >
             {/* Placeholder image */}
             <View style={styles.propertyImage}>
-              <Text style={styles.propertyEmoji}>
-                {property.emoji}
-              </Text>
+              {property.coverPhotoUrl ? (
+                <Image
+                  source={{ uri: property.coverPhotoUrl }}
+                  style={styles.propertyPhoto}
+                  resizeMode="cover"
+                />
+              ) : (
+                <Text style={styles.propertyEmoji}>
+                  {property.emoji}
+                </Text>
+              )}
 
               <View style={styles.imageTag}>
                 <Text style={styles.imageTagText}>
@@ -411,6 +432,10 @@ const styles = StyleSheet.create({
   },
   propertyEmoji: {
     fontSize: 65,
+  },
+  propertyPhoto: {
+    width: "100%",
+    height: "100%",
   },
   imageTag: {
     position: "absolute",
