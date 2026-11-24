@@ -437,3 +437,45 @@ export async function reviewAdminProperty(
 
   return data as AdminProperty;
 }
+
+export type AdminPropertyPhoto = {
+  id: string;
+  display_order: number;
+};
+
+export async function getAdminPropertyPhotos(
+  propertyId: string,
+): Promise<AdminPropertyPhoto[]> {
+  const token = getAdminToken();
+  if (!token) throw new Error("Admin session expired. Please sign in again.");
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/properties/${encodeURIComponent(propertyId)}/photos`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(typeof data.detail === "string" ? data.detail : "Unable to load property photos.");
+  }
+  return data as AdminPropertyPhoto[];
+}
+
+export async function getAdminPropertyPhotoBlob(
+  propertyId: string,
+  photoId: string,
+): Promise<Blob> {
+  const token = getAdminToken();
+  if (!token) throw new Error("Admin session expired. Please sign in again.");
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/properties/${encodeURIComponent(propertyId)}/photos/${encodeURIComponent(photoId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!response.ok) {
+    throw new Error(response.status === 401 || response.status === 403
+      ? "Admin access denied. Please sign in again."
+      : "Unable to load property photo.");
+  }
+  return response.blob();
+}
+
