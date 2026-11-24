@@ -131,6 +131,38 @@ export async function registerUser(data: {
   return result;
 }
 
+export type PropertyPhoto = {
+  id: string;
+  imageUrl: string;
+  display_order: number;
+};
+
+export async function getPropertyPhotos(
+  propertyId: string
+): Promise<PropertyPhoto[]> {
+  const response = await fetch(
+    `${API_BASE_URL}/properties/${encodeURIComponent(propertyId)}/photos`
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to fetch property photos: ${response.status}`);
+  }
+
+  const photos = (await response.json()) as {
+    id: string;
+    url: string;
+    display_order: number;
+  }[];
+
+  return photos.map((photo) => ({
+    id: photo.id,
+    imageUrl: photo.url.startsWith("http")
+      ? photo.url
+      : `${API_BASE_URL}${photo.url}`,
+    display_order: photo.display_order,
+  }));
+}
+
 export async function getProperties() {
   const response = await fetch(`${API_BASE_URL}/properties`);
 
