@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
     ActivityIndicator,
     Alert,
+    Image,
     Modal,
     Pressable,
     ScrollView,
@@ -12,7 +13,7 @@ import {
     TextInput,
     View,
 } from "react-native";
-import { getProperties } from "../services/api";
+import { getProperties, getPropertyPhotos } from "../services/api";
 
 const GREEN = "#173F35";
 const LIGHT_GREEN = "#E5EDE7";
@@ -29,6 +30,7 @@ type Property = {
   price: number | string;
   property_type?: string;
   description?: string;
+  coverPhotoUrl?: string;
 };
 
 export default function CustomerHomeScreen() {
@@ -59,7 +61,19 @@ export default function CustomerHomeScreen() {
         AsyncStorage.getItem(SAVED_KEY),
       ]);
 
-      setProperties(Array.isArray(data) ? data : []);
+      const listings = Array.isArray(data) ? data as Property[] : [];
+      const listingsWithPhotos = await Promise.all(
+        listings.map(async (property) => {
+          try {
+            const photos = await getPropertyPhotos(String(property.id));
+            return { ...property, coverPhotoUrl: photos[0]?.imageUrl };
+          } catch {
+            return property;
+          }
+        })
+      );
+
+      setProperties(listingsWithPhotos);
       setPincode(storedPin ?? "");
       setDraftPincode(storedPin ?? "");
       setSavedIds(storedSaved ? JSON.parse(storedSaved) : []);
@@ -272,9 +286,17 @@ export default function CustomerHomeScreen() {
               }
             >
               <View style={styles.propertyImage}>
-                <Text style={styles.propertyEmoji}>
-                  {property.property_type === "commercial" ? "🏢" : "🏡"}
-                </Text>
+                {property.coverPhotoUrl ? (
+                  <Image
+                    source={{ uri: property.coverPhotoUrl }}
+                    style={styles.propertyPhoto}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text style={styles.propertyEmoji}>
+                    {property.property_type === "commercial" ? "🏢" : "🏡"}
+                  </Text>
+                )}
                 <View style={styles.propertyTypeTag}>
                   <Text style={styles.propertyTypeText}>
                     {property.property_type ?? "Property"}
@@ -517,6 +539,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   propertyEmoji: { fontSize: 68 },
+  propertyPhoto: { width: "100%", height: "100%" },
   propertyTypeTag: {
     position: "absolute",
     left: 13,
