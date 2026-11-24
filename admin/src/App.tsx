@@ -1,6 +1,8 @@
 
 import {
   getAdminProperties,
+  getAdminPropertyPhotoBlob,
+  getAdminPropertyPhotos,
   getAdminToken,
   getAdminVerificationDetail,
   getAdminVerificationDocument,
