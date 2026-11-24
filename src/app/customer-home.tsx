@@ -556,7 +556,7 @@ const styles = StyleSheet.create({
     position: "absolute",
   },
   imageShade: {
-    ...StyleSheet.absoluteFillObject,
+    ...StyleSheet.absoluteFill,
     backgroundColor: "rgba(13, 28, 22, 0.24)",
   },
   featuredCaption: {
