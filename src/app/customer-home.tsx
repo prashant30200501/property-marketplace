@@ -274,75 +274,82 @@ export default function CustomerHomeScreen() {
             )}
           </View>
         ) : (
-          filteredProperties.map((property) => (
-            <Pressable
-              key={String(property.id)}
-              style={styles.propertyCard}
-              onPress={() =>
-                router.push({
-                  pathname: "/property-details",
-                  params: { id: String(property.id) },
-                })
-              }
-            >
-              <View style={styles.propertyImage}>
-                {property.coverPhotoUrl ? (
-                  <Image
-                    source={{ uri: property.coverPhotoUrl }}
-                    style={styles.propertyPhoto}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <Text style={styles.propertyEmoji}>
-                    {property.property_type === "commercial" ? "🏢" : "🏡"}
-                  </Text>
-                )}
-                <View style={styles.propertyTypeTag}>
-                  <Text style={styles.propertyTypeText}>
-                    {property.property_type ?? "Property"}
-                  </Text>
-                </View>
-                <Pressable
-                  style={styles.heartButton}
-                  onPress={(event) => {
-                    event.stopPropagation();
-                    void toggleSaved(property.id);
-                  }}
-                  accessibilityLabel={
-                    savedIds.includes(String(property.id))
-                      ? "Remove saved property"
-                      : "Save property"
-                  }
-                >
-                  <Text
-                    style={[
-                      styles.heart,
-                      savedIds.includes(String(property.id)) &&
-                        styles.heartActive,
-                    ]}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.featuredList}
+          >
+            {filteredProperties.map((property) => (
+              <Pressable
+                key={String(property.id)}
+                style={styles.featuredCard}
+                onPress={() =>
+                  router.push({
+                    pathname: "/property-details",
+                    params: { id: String(property.id) },
+                  })
+                }
+              >
+                <View style={styles.featuredImage}>
+                  {property.coverPhotoUrl ? (
+                    <Image
+                      source={{ uri: property.coverPhotoUrl }}
+                      style={styles.featuredPhoto}
+                      resizeMode="cover"
+                    />
+                  ) : (
+                    <Text style={styles.propertyEmoji}>
+                      {property.property_type === "commercial" ? "🏢" : "🏡"}
+                    </Text>
+                  )}
+                  <View style={styles.imageShade} />
+                  <View style={styles.propertyTypeTag}>
+                    <Text style={styles.propertyTypeText}>
+                      {property.property_type ?? "Property"}
+                    </Text>
+                  </View>
+                  <Pressable
+                    style={styles.heartButton}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      void toggleSaved(property.id);
+                    }}
+                    accessibilityLabel={
+                      savedIds.includes(String(property.id))
+                        ? "Remove saved property"
+                        : "Save property"
+                    }
                   >
-                    {savedIds.includes(String(property.id)) ? "♥" : "♡"}
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.propertyInfo}>
-                <Text style={styles.price}>{formatPrice(property.price)}</Text>
-                <Text style={styles.propertyTitle} numberOfLines={2}>
-                  {property.title}
-                </Text>
-                <Text style={styles.propertyAddress} numberOfLines={2}>
-                  ⌖ {property.address || "Location not provided"}
-                </Text>
-                <View style={styles.cardFooter}>
+                    <Text
+                      style={[
+                        styles.heart,
+                        savedIds.includes(String(property.id)) && styles.heartActive,
+                      ]}
+                    >
+                      {savedIds.includes(String(property.id)) ? "♥" : "♡"}
+                    </Text>
+                  </Pressable>
+                  <View style={styles.featuredCaption}>
+                    <Text style={styles.featuredPrice}>
+                      {formatPrice(property.price)}
+                    </Text>
+                    <Text style={styles.featuredTitle} numberOfLines={2}>
+                      {property.title}
+                    </Text>
+                    <Text style={styles.featuredAddress} numberOfLines={1}>
+                      ⌖ {property.address || "Location not provided"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.featuredFooter}>
                   <Text style={styles.propertyPin}>
                     {property.pincode ? `PIN ${property.pincode}` : "Nestora listing"}
                   </Text>
                   <Text style={styles.detailsLink}>View details →</Text>
                 </View>
-              </View>
-            </Pressable>
-          ))
+              </Pressable>
+            ))}
+          </ScrollView>
         )}
 
         <Text style={styles.footer}>A place for every next chapter.</Text>
@@ -523,6 +530,70 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   retryText: { color: "#FFFFFF", fontSize: 12, fontWeight: "700" },
+  featuredList: {
+    paddingRight: 4,
+    gap: 14,
+  },
+  featuredCard: {
+    width: 282,
+    backgroundColor: "#FFFFFF",
+    borderRadius: 20,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "#E7EBE5",
+    marginBottom: 8,
+  },
+  featuredImage: {
+    height: 250,
+    backgroundColor: LIGHT_GREEN,
+    position: "relative",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  featuredPhoto: {
+    width: "100%",
+    height: "100%",
+    position: "absolute",
+  },
+  imageShade: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(13, 28, 22, 0.24)",
+  },
+  featuredCaption: {
+    position: "absolute",
+    left: 16,
+    right: 16,
+    bottom: 17,
+  },
+  featuredPrice: {
+    color: "#FFFFFF",
+    fontSize: 21,
+    fontWeight: "900",
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowRadius: 5,
+  },
+  featuredTitle: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "800",
+    marginTop: 5,
+    textShadowColor: "rgba(0,0,0,0.35)",
+    textShadowRadius: 5,
+  },
+  featuredAddress: {
+    color: "#FFFFFF",
+    fontSize: 11,
+    marginTop: 6,
+    textShadowColor: "rgba(0,0,0,0.45)",
+    textShadowRadius: 4,
+  },
+  featuredFooter: {
+    paddingHorizontal: 15,
+    paddingVertical: 13,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
   propertyCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 18,
