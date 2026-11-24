@@ -2,7 +2,10 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Dimensions,
+    FlatList,
     Image,
+    Modal,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -70,6 +73,15 @@ export default function PropertyDetailsScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [galleryVisible, setGalleryVisible] = useState(false);
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
+  const screenWidth = Dimensions.get("window").width;
+  const screenHeight = Dimensions.get("window").height;
+
+  const openGallery = (index: number) => {
+    setActivePhotoIndex(index);
+    setGalleryVisible(true);
+  };
 
   const loadProperty = useCallback(async () => {
     if (!id) {
@@ -158,6 +170,7 @@ export default function PropertyDetailsScreen() {
   const propertyType = getPropertyTypeLabel(property.property_type);
 
   return (
+    <>
     <ScrollView
       style={styles.container}
       contentContainerStyle={styles.content}
@@ -172,11 +185,18 @@ export default function PropertyDetailsScreen() {
 
       <View style={styles.image}>
         {photoUrls[0] ? (
-          <Image
-            source={{ uri: photoUrls[0] }}
-            style={styles.heroPhoto}
-            resizeMode="cover"
-          />
+          <Pressable
+            style={styles.heroPhotoPressable}
+            onPress={() => openGallery(0)}
+            accessibilityRole="button"
+            accessibilityLabel="Open property photo gallery"
+          >
+            <Image
+              source={{ uri: photoUrls[0] }}
+              style={styles.heroPhoto}
+              resizeMode="cover"
+            />
+          </Pressable>
         ) : (
           <Text style={styles.emoji}>
             {getPropertyEmoji(property.property_type)}
@@ -196,13 +216,18 @@ export default function PropertyDetailsScreen() {
           contentContainerStyle={styles.photoStripContent}
         >
           {photoUrls.slice(1).map((uri, index) => (
-            <Image
-              key={uri}
-              source={{ uri }}
-              style={styles.galleryPhoto}
-              resizeMode="cover"
-              accessibilityLabel={`Property photo ${index + 2}`}
-            />
+            <Pressable
+              key={`${uri}-${index}`}
+              onPress={() => openGallery(index + 1)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open property photo ${index + 2}`}
+            >
+              <Image
+                source={{ uri }}
+                style={styles.galleryPhoto}
+                resizeMode="cover"
+              />
+            </Pressable>
           ))}
         </ScrollView>
       ) : null}
@@ -253,6 +278,63 @@ export default function PropertyDetailsScreen() {
         </Text>
       </View>
     </ScrollView>
+
+    <Modal
+      visible={galleryVisible}
+      animationType="fade"
+      transparent={false}
+      presentationStyle="fullScreen"
+      statusBarTranslucent
+      onRequestClose={() => setGalleryVisible(false)}
+    >
+      <View style={styles.galleryModal}>
+        <FlatList
+          key={activePhotoIndex}
+          data={photoUrls}
+          horizontal
+          pagingEnabled
+          initialScrollIndex={activePhotoIndex}
+          getItemLayout={(_, index) => ({
+            length: screenWidth,
+            offset: screenWidth * index,
+            index,
+          })}
+          keyExtractor={(uri, index) => `${uri}-${index}`}
+          showsHorizontalScrollIndicator={false}
+          onMomentumScrollEnd={(event) => {
+            const nextIndex = Math.round(
+              event.nativeEvent.contentOffset.x / screenWidth
+            );
+            setActivePhotoIndex(nextIndex);
+          }}
+          renderItem={({ item }) => (
+            <View style={{ width: screenWidth, height: screenHeight }}>
+              <Image
+                source={{ uri: item }}
+                style={styles.fullScreenPhoto}
+                resizeMode="contain"
+              />
+            </View>
+          )}
+        />
+
+        <Pressable
+          style={styles.galleryCloseButton}
+          onPress={() => setGalleryVisible(false)}
+          accessibilityRole="button"
+          accessibilityLabel="Close photo gallery"
+        >
+          <Text style={styles.galleryCloseText}>×</Text>
+        </Pressable>
+
+        <View style={styles.photoCounter}>
+          <Text style={styles.photoCounterText}>
+            {activePhotoIndex + 1} / {photoUrls.length}
+          </Text>
+        </View>
+      </View>
+    </Modal>
+    </>
   );
 }
 
@@ -302,6 +384,10 @@ const styles = StyleSheet.create({
   emoji: {
     fontSize: 85,
   },
+  heroPhotoPressable: {
+    width: "100%",
+    height: "100%",
+  },
   heroPhoto: {
     width: "100%",
     height: "100%",
@@ -319,6 +405,46 @@ const styles = StyleSheet.create({
     height: 82,
     borderRadius: 10,
     backgroundColor: "#E5EDE7",
+  },
+  galleryModal: {
+    flex: 1,
+    backgroundColor: "#000000",
+  },
+  fullScreenPhoto: {
+    width: "100%",
+    height: "100%",
+  },
+  galleryCloseButton: {
+    position: "absolute",
+    top: 54,
+    right: 20,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "rgba(30, 30, 30, 0.75)",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 2,
+  },
+  galleryCloseText: {
+    color: "#FFFFFF",
+    fontSize: 32,
+    lineHeight: 36,
+    fontWeight: "400",
+  },
+  photoCounter: {
+    position: "absolute",
+    top: 64,
+    alignSelf: "center",
+    backgroundColor: "rgba(30, 30, 30, 0.7)",
+    borderRadius: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  photoCounterText: {
+    color: "#FFFFFF",
+    fontSize: 13,
+    fontWeight: "600",
   },
   tag: {
     position: "absolute",
