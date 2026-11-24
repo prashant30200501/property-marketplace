@@ -575,6 +575,73 @@ function EnquiriesPanel() {
 }
 
 
+function PropertyPhotoGallery({ propertyId }: { propertyId: string }) {
+  const [photos, setPhotos] = useState<Array<{ id: string; url: string }>>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [loadingPhotos, setLoadingPhotos] = useState(true);
+  const [photoError, setPhotoError] = useState("");
+
+  useEffect(() => {
+    let active = true;
+    const objectUrls: string[] = [];
+
+    async function loadPhotos() {
+      try {
+        const photoList = await getAdminPropertyPhotos(propertyId);
+        const loaded = await Promise.all(
+          photoList.map(async (photo) => {
+            const blob = await getAdminPropertyPhotoBlob(propertyId, photo.id);
+            const objectUrl = URL.createObjectURL(blob);
+            objectUrls.push(objectUrl);
+            return { id: photo.id, url: objectUrl };
+          }),
+        );
+        if (active) setPhotos(loaded);
+      } catch (err) {
+        if (active) {
+          setPhotoError(err instanceof Error ? err.message : "Unable to load photos.");
+        }
+      } finally {
+        if (active) setLoadingPhotos(false);
+      }
+    }
+
+    void loadPhotos();
+    return () => {
+      active = false;
+      objectUrls.forEach((url) => URL.revokeObjectURL(url));
+    };
+  }, [propertyId]);
+
+  if (loadingPhotos) return <p className="property-photos-note">Loading property photos…</p>;
+  if (photoError) return <p className="property-photos-note">{photoError}</p>;
+  if (photos.length === 0) return <p className="property-photos-note">No photos uploaded.</p>;
+
+  return (
+    <>
+      <div className="property-photo-gallery">
+        {photos.map((photo, index) => (
+          <button
+            className="property-photo-thumb"
+            key={photo.id}
+            type="button"
+            onClick={() => setSelected(photo.url)}
+            aria-label={`View property photo ${index + 1}`}
+          >
+            <img src={photo.url} alt={`Property ${index + 1}`} />
+          </button>
+        ))}
+      </div>
+      {selected && (
+        <div className="property-photo-modal" role="dialog" aria-modal="true" onClick={() => setSelected(null)}>
+          <button className="property-photo-close" type="button" onClick={() => setSelected(null)} aria-label="Close photo preview">×</button>
+          <img src={selected} alt="Property preview" onClick={(event) => event.stopPropagation()} />
+        </div>
+      )}
+    </>
+  );
+}
+
 function PropertiesPanel() {
   const [properties, setProperties] = useState<AdminProperty[]>([]);
   const [loading, setLoading] = useState(true);
@@ -813,6 +880,8 @@ function PropertiesPanel() {
                     {property.description}
                   </p>
                 )}
+
+                <PropertyPhotoGallery propertyId={property.id} />
 
                 {property.moderation_reason && (
                   <p className="property-rejection-reason">
