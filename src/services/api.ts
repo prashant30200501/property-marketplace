@@ -266,6 +266,44 @@ export async function createProperty(property: {
 }
 
 
+export async function uploadPropertyPhotos(
+  propertyId: string,
+  uris: string[],
+) {
+  const token = await getToken();
+
+  if (!token) {
+    throw new Error("You must be logged in.");
+  }
+
+  const formData = new FormData();
+
+  for (const uri of uris) {
+    const file = new File(uri);
+    formData.append("files", file);
+  }
+
+  const response = await expoFetch(
+    `${API_BASE_URL}/properties/${propertyId}/photos`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body: formData,
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      `Photo upload failed: ${response.status} ${await response.text()}`,
+    );
+  }
+
+  return response.json();
+}
+
+
 export type BrokerVerificationStatus = {
   status:
     | "not_submitted"

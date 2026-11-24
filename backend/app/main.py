@@ -11,7 +11,8 @@ from PIL import Image, UnidentifiedImageError
 from contextlib import asynccontextmanager
 from app.database import Base, engine
 import app.models
-
+from app.models.property_photo import PropertyPhoto
+from app.storage import upload_photo, delete_photo, get_photos_bucket
 from sqlalchemy.exc import IntegrityError
 import uuid
 from typing import List
@@ -261,6 +262,251 @@ def create_property(
     db.refresh(property)
 
     return property
+
+
+ALLOWED_PROPERTY_PHOTO_TYPES = {
+    "image/jpeg": "jpg",
+    "image/png": "png",
+    "image/webp": "webp",
+}
+
+MAX_PROPERTY_PHOTO_SIZE = 10 * 1024 * 1024
+MAX_PROPERTY_PHOTOS = 10
+
+
+@app.post("/properties/{property_id}/photos", status_code=201)
+async def upload_property_photos(
+    property_id: uuid.UUID,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_verified_broker),
+):
+    property = db.get(Property, property_id)
+
+    if property is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Property not found.",
+        )
+
+    if property.created_by != current_user.id:
+        raise HTTPException(
+            status_code=403,
+            detail="You can only upload photos to your own properties.",
+        )
+
+    if not files:
+        raise HTTPException(
+            status_code=400,
+            detail="Select at least one photo.",
+        )
+
+    existing_count = (
+        db.query(PropertyPhoto)
+        .filter(PropertyPhoto.property_id == property_id)
+        .count()
+    )
+
+    if existing_count + len(files) > MAX_PROPERTY_PHOTOS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A property can have a maximum of {MAX_PROPERTY_PHOTOS} photos.",
+        )
+
+    validated_files = []
+
+    for file in files:
+        if file.content_type not in ALLOWED_PROPERTY_PHOTO_TYPES:
+            raise HTTPException(
+                status_code=400,
+                detail="Only JPEG, PNG, and WebP images are allowed.",
+            )
+
+        data = await file.read(MAX_PROPERTY_PHOTO_SIZE + 1)
+
+        if not data:
+            raise HTTPException(
+                status_code=400,
+                detail="An uploaded photo is empty.",
+            )
+
+        if len(data) > MAX_PROPERTY_PHOTO_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail="Each photo must be 10 MB or smaller.",
+            )
+
+        try:
+            with Image.open(BytesIO(data)) as image:
+                image.verify()
+
+            with Image.open(BytesIO(data)) as image:
+                actual_content_type = {
+                    "JPEG": "image/jpeg",
+                    "PNG": "image/png",
+                    "WEBP": "image/webp",
+                }.get(image.format)
+
+        except (UnidentifiedImageError, OSError, ValueError):
+            actual_content_type = None
+
+        if actual_content_type != file.content_type:
+            raise HTTPException(
+                status_code=400,
+                detail="The uploaded file is not a valid image of the declared type.",
+            )
+
+        validated_files.append({
+            "data": data,
+            "content_type": actual_content_type,
+            "extension": ALLOWED_PROPERTY_PHOTO_TYPES[actual_content_type],
+        })
+
+    uploaded_objects = []
+    created_photos = []
+
+    try:
+        for index, photo in enumerate(validated_files):
+            object_name = (
+                f"properties/{property_id}/{uuid.uuid4().hex}.{photo['extension']}"
+            )
+
+            upload_photo(
+                BytesIO(photo["data"]),
+                object_name,
+                photo["content_type"],
+            )
+
+            uploaded_objects.append(object_name)
+
+            photo_record = PropertyPhoto(
+                property_id=property_id,
+                object_name=object_name,
+                content_type=photo["content_type"],
+                size_bytes=len(photo["data"]),
+                display_order=existing_count + index,
+            )
+
+            db.add(photo_record)
+            created_photos.append(photo_record)
+
+        # New photos require admin review before public display.
+        property.status = "pending_review"
+        property.moderation_reason = None
+
+        db.commit()
+
+        for photo_record in created_photos:
+            db.refresh(photo_record)
+
+    except Exception:
+        db.rollback()
+
+        for object_name in uploaded_objects:
+            try:
+                delete_photo(object_name)
+            except Exception:
+                pass
+
+        raise HTTPException(
+            status_code=500,
+            detail="Unable to save property photos. Please try again.",
+        )
+
+    return {
+        "message": "Property photos uploaded successfully.",
+        "photos": [
+            {
+                "id": str(photo.id),
+                "content_type": photo.content_type,
+                "size_bytes": photo.size_bytes,
+                "display_order": photo.display_order,
+            }
+            for photo in created_photos
+        ],
+    }
+
+
+@app.get("/properties/{property_id}/photos")
+def get_property_photos(
+    property_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    property = db.get(Property, property_id)
+
+    if property is None or property.status != "available":
+        raise HTTPException(
+            status_code=404,
+            detail="Property not found.",
+        )
+
+    photos = (
+        db.query(PropertyPhoto)
+        .filter(PropertyPhoto.property_id == property_id)
+        .order_by(PropertyPhoto.display_order.asc())
+        .all()
+    )
+
+    return [
+        {
+            "id": str(photo.id),
+            "url": f"/properties/{property_id}/photos/{photo.id}",
+            "display_order": photo.display_order,
+        }
+        for photo in photos
+    ]
+
+
+@app.get("/properties/{property_id}/photos/{photo_id}")
+def get_property_photo(
+    property_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    db: Session = Depends(get_db),
+):
+    property = db.get(Property, property_id)
+
+    if property is None or property.status != "available":
+        raise HTTPException(
+            status_code=404,
+            detail="Photo not found.",
+        )
+
+    photo = (
+        db.query(PropertyPhoto)
+        .filter(
+            PropertyPhoto.id == photo_id,
+            PropertyPhoto.property_id == property_id,
+        )
+        .first()
+    )
+
+    if photo is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Photo not found.",
+        )
+
+    try:
+        image_data = (
+            get_photos_bucket()
+            .blob(photo.object_name)
+            .download_as_bytes()
+        )
+    except Exception:
+        raise HTTPException(
+            status_code=404,
+            detail="Photo file not found.",
+        )
+
+    return Response(
+        content=image_data,
+        media_type=photo.content_type,
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
+
 
 @app.get("/admin/properties", response_model=list[PropertyResponse])
 def get_admin_properties(

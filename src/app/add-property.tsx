@@ -1,7 +1,9 @@
+import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import {
     Alert,
+    Image,
     KeyboardAvoidingView,
     Platform,
     Pressable,
@@ -13,7 +15,7 @@ import {
     View,
 } from "react-native";
 
-import { createProperty } from "../services/api";
+import { createProperty, uploadPropertyPhotos } from "../services/api";
 
 const TEST_BROKER_ID = "4a033209-13bd-4a85-bff9-4251b43dfdc0";
 
@@ -37,6 +39,46 @@ export default function AddPropertyScreen() {
   const [address, setAddress] = useState("");
   const [pincode, setPincode] = useState("");
   const [loading, setLoading] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+
+  async function pickPhotos() {
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ["images"],
+    allowsMultipleSelection: true,
+    selectionLimit: 10 - photos.length,
+    quality: 0.8,
+  });
+
+
+
+  if (!result.canceled) {
+    const selected = result.assets.map((asset) => asset.uri);
+    setPhotos((current) => [...current, ...selected].slice(0, 10));
+  }
+}
+
+async function takePhoto() {
+  if (photos.length >= 10) {
+    Alert.alert("Photo limit", "You can add up to 10 photos.");
+    return;
+  }
+
+  const permission = await ImagePicker.requestCameraPermissionsAsync();
+
+  if (!permission.granted) {
+    Alert.alert("Permission required", "Please allow camera access.");
+    return;
+  }
+
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ["images"],
+    quality: 0.8,
+  });
+
+  if (!result.canceled) {
+    setPhotos((current) => [...current, result.assets[0].uri].slice(0, 10));
+  }
+}
 
   async function handleSubmit() {
     if (
@@ -67,15 +109,18 @@ export default function AddPropertyScreen() {
     try {
       setLoading(true);
 
-      await createProperty({
-        title: title.trim(),
-        description: description.trim() || undefined,
-        property_type: propertyType,
-        price: numericPrice,
-        address: address.trim(),
-        pincode: pincode.trim(),
-        
-      });
+     const property = await createProperty({
+  title: title.trim(),
+  description: description.trim() || undefined,
+  property_type: propertyType,
+  price: numericPrice,
+  address: address.trim(),
+  pincode: pincode.trim(),
+});
+
+if (photos.length > 0) {
+  await uploadPropertyPhotos(property.id, photos);
+}
 
       Alert.alert(
         "Property Listed",
@@ -118,6 +163,37 @@ export default function AddPropertyScreen() {
           <Text style={styles.subtitle}>
             List a new property on Nestora.
           </Text>
+
+          <Text style={styles.label}>PROPERTY PHOTOS (MAX 10)</Text>
+
+<Pressable style={styles.photoButton} onPress={pickPhotos}>
+  <Text style={styles.photoButtonText}>
+    + Select Property Photos
+  </Text>
+</Pressable>
+<Pressable style={styles.photoButton} onPress={takePhoto}>
+  <Text style={styles.photoButtonText}>📷 Take Property Photo</Text>
+</Pressable>
+
+<View style={styles.photoGrid}>
+  {photos.map((uri, index) => (
+    <View key={`${uri}-${index}`} style={styles.photoItem}>
+      <Image source={{ uri }} style={styles.photoPreview} />
+      <Pressable
+        style={styles.removePhoto}
+        onPress={() =>
+          setPhotos((current) =>
+            current.filter((_, i) => i !== index)
+          )
+        }
+      >
+        <Text style={styles.removePhotoText}>×</Text>
+      </Pressable>
+    </View>
+  ))}
+</View>
+
+<Text style={styles.photoCount}>{photos.length}/10 photos selected</Text>
 
           <View style={styles.card}>
             <Text style={styles.label}>PROPERTY TITLE</Text>
@@ -322,4 +398,52 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     letterSpacing: 0.5,
   },
+
+  photoButton: {
+  borderWidth: 1,
+  borderColor: COLORS.gold,
+  borderStyle: "dashed",
+  borderRadius: 12,
+  padding: 16,
+  alignItems: "center",
+  backgroundColor: "#FFFDF5",
+},
+photoButtonText: {
+  color: COLORS.navy,
+  fontWeight: "700",
+},
+photoGrid: {
+  flexDirection: "row",
+  flexWrap: "wrap",
+  gap: 10,
+  marginTop: 12,
+},
+photoItem: {
+  position: "relative",
+},
+photoPreview: {
+  width: 90,
+  height: 90,
+  borderRadius: 10,
+},
+removePhoto: {
+  position: "absolute",
+  top: -7,
+  right: -7,
+  backgroundColor: "#D32F2F",
+  width: 23,
+  height: 23,
+  borderRadius: 12,
+  alignItems: "center",
+  justifyContent: "center",
+},
+removePhotoText: {
+  color: "#FFFFFF",
+  fontWeight: "800",
+},
+photoCount: {
+  color: COLORS.muted,
+  fontSize: 12,
+  marginTop: 8,
+},
 });

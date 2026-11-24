@@ -1,11 +1,13 @@
 
 import {
+  getAdminProperties,
   getAdminToken,
   getAdminVerificationDetail,
   getAdminVerificationDocument,
   getAdminVerifications,
   loginAdmin,
   logoutAdmin,
+  reviewAdminProperty,
   reviewAdminVerification,
 } from "./api";
 
@@ -24,6 +26,7 @@ import {
 import type { FormEvent } from "react";
 import { useEffect, useState } from "react";
 import type {
+  AdminProperty,
   BrokerVerification,
   BrokerVerificationDetail,
   KycDocumentType,
@@ -104,7 +107,6 @@ function LoginScreen({ onLogin }: { onLogin: () => void }) {
 
 function EnquiriesPanel() {
   const [enquiries, setEnquiries] = useState<AdminEnquiry[]>([]);
-  const [brokers, setBrokers] = useState<BrokerVerification[]>([]);
   const [recommendations, setRecommendations] = useState<
     Record<string, BrokerRecommendationsResponse>
   >({});
@@ -121,27 +123,20 @@ function EnquiriesPanel() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   async function loadEnquiries() {
-    setLoading(true);
-    setError("");
+  setLoading(true);
+  setError("");
 
-    try {
-      const [enquiryData, brokerData] = await Promise.all([
-        getAdminEnquiries(),
-        getAdminVerifications(),
-      ]);
-
-      setEnquiries(enquiryData);
-      setBrokers(
-        brokerData.filter((broker) => broker.status === "verified"),
-      );
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to load enquiries.",
-      );
-    } finally {
-      setLoading(false);
-    }
+  try {
+    const enquiryData = await getAdminEnquiries();
+    setEnquiries(enquiryData);
+  } catch (err) {
+    setError(
+      err instanceof Error ? err.message : "Unable to load enquiries.",
+    );
+  } finally {
+    setLoading(false);
   }
+}
 
   useEffect(() => {
     void loadEnquiries();
@@ -580,11 +575,284 @@ function EnquiriesPanel() {
 }
 
 
+function PropertiesPanel() {
+  const [properties, setProperties] = useState<AdminProperty[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("all");
+
+  async function loadProperties() {
+    setLoading(true);
+    setError("");
+
+    try {
+      const data = await getAdminProperties();
+      setProperties(data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to load properties.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadProperties();
+  }, []);
+
+  async function reviewProperty(
+    property: AdminProperty,
+    status: "available" | "rejected",
+  ) {
+    if (status === "available") {
+      if (!window.confirm(`Approve "${property.title}"?`)) return;
+    }
+
+    let reason: string | undefined;
+
+    if (status === "rejected") {
+      const answer = window.prompt(
+        `Why are you rejecting "${property.title}"?`,
+      );
+
+      if (answer === null) return;
+
+      if (!answer.trim()) {
+        setError("Please provide a rejection reason.");
+        return;
+      }
+
+      reason = answer.trim();
+
+      if (!window.confirm(`Reject "${property.title}"?`)) return;
+    }
+
+    setBusyId(property.id);
+    setError("");
+
+    try {
+      await reviewAdminProperty(property.id, status, reason);
+      await loadProperties();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Unable to review property.",
+      );
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  const pendingCount = properties.filter(
+    (p) => p.status === "pending_review",
+  ).length;
+
+  const approvedCount = properties.filter(
+    (p) => p.status === "available",
+  ).length;
+
+  const rejectedCount = properties.filter(
+    (p) => p.status === "rejected",
+  ).length;
+
+  const query = search.trim().toLowerCase();
+
+  const filteredProperties = properties.filter((property) => {
+    const matchesSearch = [
+      property.title,
+      property.address,
+      property.pincode,
+      property.property_type,
+    ].some((value) => (value || "").toLowerCase().includes(query));
+
+    const matchesFilter =
+      filter === "all" ||
+      (filter === "pending" && property.status === "pending_review") ||
+      (filter === "approved" && property.status === "available") ||
+      (filter === "rejected" && property.status === "rejected");
+
+    return matchesSearch && matchesFilter;
+  });
+
+  return (
+    <section className="properties-page">
+      <div className="enquiries-heading">
+        <div>
+          <span className="eyebrow">MARKETPLACE MODERATION</span>
+          <h2>Property management</h2>
+          <p>Review property submissions before they appear in the marketplace.</p>
+        </div>
+
+        <button
+          className="primary-button"
+          onClick={() => void loadProperties()}
+          disabled={loading}
+        >
+          {loading ? "Refreshing..." : "↻ Refresh"}
+        </button>
+      </div>
+
+      {error && <div className="login-error">{error}</div>}
+
+      <div className="enquiry-stats">
+        <div className="enquiry-stat">
+          <span>Total properties</span>
+          <strong>{properties.length}</strong>
+        </div>
+        <div className="enquiry-stat">
+          <span>Pending review</span>
+          <strong>{pendingCount}</strong>
+        </div>
+        <div className="enquiry-stat">
+          <span>Approved</span>
+          <strong>{approvedCount}</strong>
+        </div>
+        <div className="enquiry-stat">
+          <span>Rejected</span>
+          <strong>{rejectedCount}</strong>
+        </div>
+      </div>
+
+      <div className="panel">
+        <div className="enquiries-toolbar">
+          <div>
+            <h3>Submitted properties</h3>
+            <p>{filteredProperties.length} properties found</p>
+          </div>
+
+          <input
+            className="enquiry-search"
+            type="search"
+            placeholder="Search title, address, pincode..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+        </div>
+
+        <div className="enquiry-filters">
+          {[
+            ["all", "All"],
+            ["pending", "Pending"],
+            ["approved", "Approved"],
+            ["rejected", "Rejected"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              className={`enquiry-filter ${filter === value ? "active" : ""}`}
+              onClick={() => setFilter(value)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {loading && <p className="enquiries-message">Loading properties...</p>}
+
+        {!loading && properties.length === 0 && !error && (
+          <div className="empty-state">
+            <strong>No properties submitted yet</strong>
+            <p>New property submissions will appear here.</p>
+          </div>
+        )}
+
+        {!loading && properties.length > 0 && filteredProperties.length === 0 && (
+          <div className="empty-state">
+            <strong>No matching properties</strong>
+            <p>Try another search or filter.</p>
+          </div>
+        )}
+
+        {!loading &&
+          filteredProperties.map((property) => {
+            const pending = property.status === "pending_review";
+            const busy = busyId === property.id;
+
+            return (
+              <article className="property-review-card" key={property.id}>
+                <div className="enquiry-card-header">
+                  <div>
+                    <span className="eyebrow">
+                      {property.property_type.replaceAll("_", " ")}
+                    </span>
+                    <h4>{property.title}</h4>
+                  </div>
+
+                  <span className={`enquiry-status ${pending ? "pending" : property.status === "available" ? "assigned" : ""}`}>
+                    {property.status.replaceAll("_", " ")}
+                  </span>
+                </div>
+
+                <div className="enquiry-details-grid">
+                  <div>
+                    <span>Price</span>
+                    <strong>
+                      ₹{Number(property.price).toLocaleString("en-IN")}
+                    </strong>
+                  </div>
+
+                  <div>
+                    <span>Location</span>
+                    <strong>{property.address}</strong>
+                    <small>PIN: {property.pincode}</small>
+                  </div>
+
+                  <div>
+                    <span>Submitted</span>
+                    <strong>
+                      {property.created_at
+                        ? new Date(property.created_at).toLocaleString()
+                        : "Not available"}
+                    </strong>
+                  </div>
+                </div>
+
+                {property.description && (
+                  <p className="property-description">
+                    {property.description}
+                  </p>
+                )}
+
+                {property.moderation_reason && (
+                  <p className="property-rejection-reason">
+                    Rejection reason: {property.moderation_reason}
+                  </p>
+                )}
+
+                {pending && (
+                  <div className="property-review-actions">
+                    <button
+                      className="reject-button"
+                      disabled={busy}
+                      onClick={() => void reviewProperty(property, "rejected")}
+                    >
+                      {busy ? "Processing..." : "Reject"}
+                    </button>
+
+                    <button
+                      className="approve-button"
+                      disabled={busy}
+                      onClick={() => void reviewProperty(property, "available")}
+                    >
+                      {busy ? "Processing..." : "Approve property"}
+                    </button>
+                  </div>
+                )}
+              </article>
+            );
+          })}
+      </div>
+    </section>
+  );
+}
+
+
 
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [page, setPage] = useState<
-  "dashboard" | "kyc" | "enquiries"
+  "dashboard" | "kyc" | "enquiries" | "properties"
 >("dashboard");
   const [kycFilter, setKycFilter] = useState<
   "under_review" | "verified" | "rejected"
@@ -842,7 +1110,12 @@ async function rejectVerification() {
           </button>
 
           <button className="nav-item">Brokers</button>
-          <button className="nav-item">Properties</button>
+         <button
+  className={`nav-item ${page === "properties" ? "active" : ""}`}
+  onClick={() => setPage("properties")}
+>
+  Properties
+</button>
           <button
   className={`nav-item ${page === "enquiries" ? "active" : ""}`}
   onClick={() => setPage("enquiries")}
@@ -857,9 +1130,11 @@ async function rejectVerification() {
           <div>
             <h1>
   {page === "kyc"
-    ? "KYC Review"
-    : page === "enquiries"
-      ? "Enquiries"
+  ? "KYC Review"
+  : page === "enquiries"
+    ? "Enquiries"
+    : page === "properties"
+      ? "Properties"
       : "Dashboard"}
 </h1>
 
@@ -1168,9 +1443,11 @@ async function rejectVerification() {
                 </div>
               ))}
           </section>
-          ) : (
+          ) : page === "enquiries" ? (
   <EnquiriesPanel />
-        )}
+) : (
+  <PropertiesPanel />
+)}
       </main>
     </div>
   );

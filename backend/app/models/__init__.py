@@ -15,3 +15,4 @@ __all__ = [
     "EnquiryActivity",
     "EnquiryFollowup",
 ]
+from app.models.property_photo import PropertyPhoto

@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     kyc_encryption_key: str
     google_client_id: str = ""
     google_android_client_id: str = ""
+    property_photos_bucket: str = "nestora-property-photos-2026"
     
 
     model_config = SettingsConfigDict(

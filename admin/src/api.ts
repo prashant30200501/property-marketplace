@@ -360,3 +360,80 @@ export async function getBrokerRecommendations(
 
   return data as BrokerRecommendationsResponse;
 }
+export type AdminProperty = {
+  id: string;
+  title: string;
+  description: string | null;
+  property_type: string;
+  price: number | string;
+  address: string;
+  pincode: string;
+  status: string;
+  moderation_reason: string | null;
+  created_at: string;
+};
+
+export async function getAdminProperties(): Promise<AdminProperty[]> {
+  const token = getAdminToken();
+
+  if (!token) {
+    throw new Error("Admin session expired. Please sign in again.");
+  }
+
+  const response = await fetch(`${API_BASE_URL}/admin/properties`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Unable to load properties.",
+    );
+  }
+
+  return data as AdminProperty[];
+}
+
+export async function reviewAdminProperty(
+  propertyId: string,
+  status: "available" | "rejected",
+  moderationReason?: string,
+): Promise<AdminProperty> {
+  const token = getAdminToken();
+
+  if (!token) {
+    throw new Error("Admin session expired. Please sign in again.");
+  }
+
+  const response = await fetch(
+    `${API_BASE_URL}/admin/properties/${encodeURIComponent(propertyId)}/review`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        status,
+        moderation_reason: moderationReason || null,
+      }),
+    },
+  );
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      typeof data.detail === "string"
+        ? data.detail
+        : "Unable to review property.",
+    );
+  }
+
+  return data as AdminProperty;
+}
