@@ -2,6 +2,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useState } from "react";
 import {
     ActivityIndicator,
+    Image,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -9,7 +10,7 @@ import {
     View,
 } from "react-native";
 
-import { getProperties } from "../services/api";
+import { getProperties, getPropertyPhotos } from "../services/api";
 
 type Property = {
   id: string;
@@ -68,6 +69,7 @@ export default function PropertyDetailsScreen() {
   const [property, setProperty] = useState<Property | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
 
   const loadProperty = useCallback(async () => {
     if (!id) {
@@ -92,6 +94,12 @@ export default function PropertyDetailsScreen() {
         setError("");
       } else {
         setProperty(selectedProperty);
+        try {
+          const photos = await getPropertyPhotos(String(selectedProperty.id));
+          setPhotoUrls(photos.map((photo) => photo.imageUrl));
+        } catch {
+          setPhotoUrls([]);
+        }
       }
     } catch (err) {
       setProperty(null);
@@ -163,14 +171,41 @@ export default function PropertyDetailsScreen() {
       </Pressable>
 
       <View style={styles.image}>
-        <Text style={styles.emoji}>
-          {getPropertyEmoji(property.property_type)}
-        </Text>
+        {photoUrls[0] ? (
+          <Image
+            source={{ uri: photoUrls[0] }}
+            style={styles.heroPhoto}
+            resizeMode="cover"
+          />
+        ) : (
+          <Text style={styles.emoji}>
+            {getPropertyEmoji(property.property_type)}
+          </Text>
+        )}
 
         <View style={styles.tag}>
           <Text style={styles.tagText}>{propertyType}</Text>
         </View>
       </View>
+
+      {photoUrls.length > 1 ? (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.photoStrip}
+          contentContainerStyle={styles.photoStripContent}
+        >
+          {photoUrls.slice(1).map((uri, index) => (
+            <Image
+              key={uri}
+              source={{ uri }}
+              style={styles.galleryPhoto}
+              resizeMode="cover"
+              accessibilityLabel={`Property photo ${index + 2}`}
+            />
+          ))}
+        </ScrollView>
+      ) : null}
 
       <View style={styles.detailsCard}>
         <Text style={styles.listingType}>
@@ -266,6 +301,24 @@ const styles = StyleSheet.create({
   },
   emoji: {
     fontSize: 85,
+  },
+  heroPhoto: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 18,
+  },
+  photoStrip: {
+    marginTop: -8,
+    marginBottom: 20,
+  },
+  photoStripContent: {
+    gap: 10,
+  },
+  galleryPhoto: {
+    width: 112,
+    height: 82,
+    borderRadius: 10,
+    backgroundColor: "#E5EDE7",
   },
   tag: {
     position: "absolute",
